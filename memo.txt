@@ -1,0 +1,11 @@
+
+ラベルノイズ多い
+cgmとラベル付けされていますが画像には非常に多くの葉があり、健康な葉がいくつか見られる
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202673
+
+
+アプリケーションの観点から、フレーマーは対象のオブジェクトを画像の中央に配置する必要があります。
+センタークロップだけを取るか、センターフォーカスアテンションマスクを置くと、結果はもっと良くなるでしょうか？
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202673
+
+
