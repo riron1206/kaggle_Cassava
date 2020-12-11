@@ -6,10 +6,24 @@
 - 画像の入力サイズ変えたモデルアンサンブルも有効みたい
 - cutmix
 - se-resnet50
+- SwAV(以前のkaggleデータセットからのラベルなし画像で)
 
+--------------------------------------------------------------
+■試したいnotebook
+
+Vit-pytorch
+https://www.kaggle.com/szuzhangzhi/vision-transformer-vit-cuda-as-usual
 
 --------------------------------------------------------------
 ■ディスカッションメモ
+
+cvとLBはほぼ一致
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/198219
+
+
+同じ画像なのにラベル違う
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/198202
+
 
 ラベルノイズ多い
 cgmとラベル付けされていますが画像には非常に多くの葉があり、健康な葉がいくつか見られる
@@ -37,6 +51,10 @@ https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/201699
 
 過去コンペから自前で精査したキャッサバデータセット
 https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/200722
+
+
+サブミットは約15,000枚の画像予測される
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/201473
 
 
 VIT
@@ -85,5 +103,15 @@ https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/200726
 SnapMix
 新しいデータオーギュメントの方法
 https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202627
+
+
+キャッサバの鉛の病気の解説
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/198143
+
+
+ディープラーニング+植物病害分類研究論文
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/199692
+
+
 
 
