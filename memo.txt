@@ -1,11 +1,89 @@
+■試すべきこと
+- ラベルスムージング
+- 勾配クリッピング
+- 最後の層のシグモイド+ BinaryCrossentropy
+- TTA
+- 画像の入力サイズ変えたモデルアンサンブルも有効みたい
+- cutmix
+- se-resnet50
+
+
+--------------------------------------------------------------
+■ディスカッションメモ
 
 ラベルノイズ多い
 cgmとラベル付けされていますが画像には非常に多くの葉があり、健康な葉がいくつか見られる
 https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202673
 
 
+この競合は、データセット内のノイズを推定し、正しいトレーニングパラメータを適用してベイズエラーを取得するようなものらしいテストセットもノイズが多い！！！！要はラベルが間違っているサンプル多い（=trainのノイズラベルを除くのは意味なし）
+早期停止やラベルのスムーズ、SVMの適用などの一般的な手法があります
+（ケロッピ談）
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202017
+
+
+以前のkaggleデータセットからのラベルなし画像を使用したオフライン半教師あり学習（SimCLRv2、SwAV、MoCo）
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/199276
+
+
+勾配クリッピングも有効なのかも
+グラジエントクリッピングはラベルノイズを軽減できますか？ICLR 2020
+https://openreview.net/pdf?id=rklB76EKPr
+
+
+異なるラベルに対応する画像はそれらの間で類似性があり、データセットは画像に誤ったラベルが付けられているという事実を考えると、GroupStratified-Kfoldを使用する方が良いと私は主張
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/201699
+
+
+過去コンペから自前で精査したキャッサバデータセット
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/200722
+
+
+VIT
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/201601
+
+
+去年のコンペでは 512*512 se-resnet50 5fold 3TTA
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/200141
+
+
+モデルのパフォーマンスを改善するために実験する8つの手法
+- 最後の層のシグモイド+ BinaryCrossentropy +ラベルの平滑化はsoftmaxよりも優れているはず
+- using noisy students weights
+- Fmix
+- クロスエントロピー損失以外の損失. Focal lossとか
+- dropout
+- ノイズの多いラベルを処理するときに過去に行ったことは、softmax以降のすべてのデータでトレーニングされたモデルのOOF予測を使用し、softmax値が小さすぎて正しいラベルが得られない画像を削除する
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202351
+
+
+ノイズの多いラベルに関する論文
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202581
+
+
+前のコンペのベースラインnotebook(pytorch)
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202485
+
+
 アプリケーションの観点から、フレーマーは対象のオブジェクトを画像の中央に配置する必要があります。
 センタークロップだけを取るか、センターフォーカスアテンションマスクを置くと、結果はもっと良くなるでしょうか？
 https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202673
+
+
+ラベルスムージングは効くがCutMixはうまくいかんらしい
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202206
+
+
+ジグソーみたいなデータ水増し
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202560
+
+
+画像の入力サイズ変えたモデルアンサンブルも有効みたい
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/200726
+
+
+SnapMix
+新しいデータオーギュメントの方法
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202627
 
 

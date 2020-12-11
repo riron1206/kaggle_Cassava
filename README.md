@@ -6,6 +6,8 @@
 ## コンペ概要
 - キャッサバの葉の病気の種類を分類
     - アフリカの農家の方が病気のキャッサバを素早く見分けるのに使える
+    - キャッサバの鉛病の解説
+      https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/198143
 - 特徴量は画像
     - train: 21,367枚
 - マルチクラス分類問題
