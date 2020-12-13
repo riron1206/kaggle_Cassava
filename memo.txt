@@ -112,6 +112,138 @@ https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/198143
 ディープラーニング+植物病害分類研究論文
 https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/199692
 
+--------------------------------------------------------------
+
+# https://www.kaggle.com/ababino/cutmix-with-fastai-and-efficientnet
+class CutMix(MixUp):
+    def __init__(self, alpha=1.): self.distrib = Beta(tensor(alpha), tensor(alpha))
+    def before_batch(self):
+        lam = self.distrib.sample().squeeze().to(self.x.device)
+        shuffle = torch.randperm(self.y.size(0)).to(self.x.device)
+        self.yb1 = tuple(L(self.yb).itemgot(shuffle))
+        nx_dims = len(self.x.size())
+        bs, c, h, w = self.x.shape
+        rx, ry = w*self.distrib.sample(), h*self.distrib.sample()
+        rw, rh = w*(1-lam).sqrt(), h*(1-lam).sqrt()
+        x1 = (rx-rw/2).clamp(min=0).round().to(int)
+        x2 = (rx+rw/2).clamp(max=w).round().to(int)
+        y1 = (ry-rh/2).clamp(min=0).round().to(int)
+        y2 = (ry+rh/2).clamp(max=h).round().to(int)
+        self.learn.xb[0][:,:,y1:y2,x1:x2] = self.learn.xb[0][shuffle,:,y1:y2,x1:x2]
+        self.lam = 1- float(x2-x1)*(y2-y1)/(h*w)
+        
+        if not self.stack_y:
+            ny_dims = len(self.y.size())
+            self.learn.yb = tuple(L(self.yb1,self.yb).map_zip(torch.lerp,weight=unsqueeze(self.lam, n=ny_dims-1)))
+            
+LB: 0.89
+https://www.kaggle.com/dunklerwald/pytorch-efficientnet-with-tta-inference
+class EfficientNet(nn.Module):
+    def __init__(self, num_classes):
+        super(EfficientNet, self).__init__()
+        #self.base_model = efficientnet_pytorch.EfficientNet.from_pretrained('efficientnet-b' + str(EFFNET_MODEL))
+        self.base_model = timm.create_model(f"tf_efficientnet_b{str(EFFNET_MODEL)}_ns", pretrained=False)
+        self.dropout = nn.Dropout(0.2)
+        
+        self.out = nn.Linear(
+            in_features=effnet_output[EFFNET_MODEL], 
+            out_features=num_classes, 
+            bias=True
+        )
+        
+    def forward(self, image, targets=None):
+        batch_size, _, _, _ = image.shape
+        
+        x = self.base_model.forward_features(image) 
+        x = F.adaptive_avg_pool2d(x, 1).reshape(batch_size, -1)
+        out = self.out(self.dropout(x)) 
+        
+        return out, None, None 
+
+
+https://www.kaggle.com/dunklerwald/pytorch-efficientnet-with-tta-training
+#source: https://www.kaggle.com/c/siim-isic-melanoma-classification/discussion/173733
+class SmoothCrossEntropyLoss(_WeightedLoss):
+    def __init__(self, weight=None, reduction='mean', smoothing=SMOOTHING):
+        super().__init__(weight=weight, reduction=reduction)
+        self.smoothing = smoothing
+        self.weight = weight
+        self.reduction = reduction
+
+    @staticmethod
+    def _smooth_one_hot(targets:torch.Tensor, n_classes:int, smoothing=SMOOTHING):
+        assert 0 <= smoothing < 1
+        with torch.no_grad():
+            targets = torch.empty(size=(targets.size(0), n_classes),
+                    device=targets.device) \
+                .fill_(smoothing /(n_classes-1)) \
+                .scatter_(1, targets.data.unsqueeze(1), 1.-smoothing)
+        return targets
+
+    def forward(self, inputs, targets):
+        targets = SmoothCrossEntropyLoss._smooth_one_hot(targets, inputs.size(-1),
+            self.smoothing)
+        lsm = F.log_softmax(inputs, -1)
+
+        if self.weight is not None:
+            lsm = lsm * self.weight.unsqueeze(0)
+
+        loss = -(targets * lsm).sum(-1)
+
+        if  self.reduction == 'sum':
+            loss = loss.sum()
+        elif  self.reduction == 'mean':
+            loss = loss.mean()
+
+        return loss
+
+
+class CustomSchedulerLR:
+    def lrfn(self, epoch):      
+        if epoch < self.lr_ramp_ep:
+            lr = (self.lr_max - self.lr_start) / self.lr_ramp_ep * epoch + self.lr_start           
+        elif epoch < self.lr_ramp_ep + self.lr_sus_ep:
+            lr = self.lr_max
+        else:
+            lr = (self.lr_max - self.lr_min) * self.lr_decay**(epoch - self.lr_ramp_ep - self.lr_sus_ep) + self.lr_min
+
+        return lr   
+
+    def __init__(self, optimizer, epoch, batch_size):
+        self.lr_start = 0.00005
+        self.lr_min = 0.00005
+        self.lr_ramp_ep = 5
+        self.lr_sus_ep = 0
+        self.lr_decay = 0.8  
+        self.lr_max = 0.00001 * batch_size
+        self.optimizer = optimizer
+
+        lr = self.lrfn(epoch)    
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = lr
+
+    def step(self, epoch):
+        lr = self.lrfn(epoch)  
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = lr
+
+
+LB: 0.89 resnext50_32x4d
+# https://www.kaggle.com/manojprabhaakr/leaf-classification-resnext-50-32-4d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
