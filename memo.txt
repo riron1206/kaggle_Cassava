@@ -21,6 +21,10 @@ cvとLBはほぼ一致
 https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/198219
 
 
+# Attension系のモデル紹介
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/203083
+
+
 同じ画像なのにラベル違う
 https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/198202
 
@@ -114,6 +118,20 @@ https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/199692
 
 --------------------------------------------------------------
 
+画像の過去コンペと同じようにtrainとtestでラベルの分布違うのかなあ
+3種(300*300, 460*460, 456*456の画像サイズ違いでモデル作りfeature map多様化させるの有効みたい)
+https://speakerdeck.com/hoxomaxwell/kaggle-aptos-2019-at-u-tokyo-med?slide=11
+
+ベンガル語の上位解法
+https://st1990.hatenablog.com/entry/2020/03/18/175001
+
+
+Signateクジラコンペの解法。クラス数不定の分類問題なのでArcFace使ってる
+https://www.slideshare.net/ren4yu/humpback-whale-identification-challenge
+
+
+
+--------------------------------------------------------------
 # https://www.kaggle.com/ababino/cutmix-with-fastai-and-efficientnet
 class CutMix(MixUp):
     def __init__(self, alpha=1.): self.distrib = Beta(tensor(alpha), tensor(alpha))
