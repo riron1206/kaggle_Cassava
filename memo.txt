@@ -251,11 +251,67 @@ LB: 0.89 resnext50_32x4d
 
 
 
+------------------------------------------------------------------------
+
+# https://www.kaggle.com/frlemarchand/efficientnet-aug-tf-keras-for-cassava-diseases
+
+def load_image_and_label_from_path(image_path, label):
+    img = tf.io.read_file(image_path)
+    img = tf.image.decode_jpeg(img, channels=3)
+    img = tf.cast(img, tf.float32) / 255.0
+    return img, label
+
+
+training_data = tf.data.Dataset.from_tensor_slices((train_df.filepath.values, train_df.label.values))
+validation_data = tf.data.Dataset.from_tensor_slices((validation_df.filepath.values, validation_df.label.values))
+
+AUTO = tf.data.experimental.AUTOTUNE
+
+training_ds = (
+    training_data
+    .map(load_image_and_label_from_path, num_parallel_calls=AUTO)
+    .repeat()
+    .shuffle(buffer_size=256)
+    .batch(BATCH_SIZE)
+    .prefetch(buffer_size=AUTO)
+)
+testing_ds = (
+    validation_data
+    .map(load_image_and_label_from_path, num_parallel_calls=AUTO)
+    .batch(BATCH_SIZE)
+    .prefetch(buffer_size=AUTO)
+)
 
 
 
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import StratifiedKFold
 
+df = pd.read_csv('../input/cassava-leaf-disease-classification/train.csv')
 
+n_splits = 10
+
+skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+    
+for fold, (trn_idx, val_idx) in enumerate(skf.split(np.arange(df.shape[0]), df.label.values)):
+    df.loc[df.iloc[val_idx].index, 'fold'] = fold
+
+df["filepath"] = f"../input/cassava-leaf-disease-classification/train_images/" + df["image_id"]
+display(df.head())
+
+train_df = df[df["fold"] == 0]
+print('train_df Class distribution per fold.\n', train_df['label'].value_counts())
+
+print()
+
+validation_df = df[df["fold"].isin([7, 8, 9])]
+print('validation_df Class distribution per fold.\n', validation_df['label'].value_counts())
+
+TRAINING_FILENAMES = train_df["filepath"]
+VALID_FILENAMES = validation_df["filepath"]
+NUM_TRAINING_IMAGES = len(TRAINING_FILENAMES)
+NUM_VALIDATION_IMAGES = len(VALID_FILENAMES)
 
 
 

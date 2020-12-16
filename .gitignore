@@ -1,3 +1,4 @@
 # Git の管理に含めないファイルを指定するためのファイル https://qiita.com/inabe49/items/16ee3d9d1ce68daa9fff
 git_push_kaggle_Cassava.bat
-poetry_lightning_kaggle_Cassava.lnk
+conda_lightning_kaggle_Cassava.lnk
+poetry_tfgpu_kaggle_Cassava.lnk
