@@ -15,7 +15,16 @@ Vit-pytorch
 https://www.kaggle.com/szuzhangzhi/vision-transformer-vit-cuda-as-usual
 
 --------------------------------------------------------------
+
+■アンサンブルするモデル
+1.元のアスペクト比を使用
+2.サイズ変更を使用
+3.センタークロップを使用
+非常に異なるCVスコアが得られることに気づきました。したがって、これらのモデルをアンサンブルすると役立つ可能性があります。https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/205491
+
+--------------------------------------------------------------
 ■ディスカッションメモ
+
 
 cvとLBはほぼ一致
 https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/198219
