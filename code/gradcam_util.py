@@ -65,7 +65,9 @@ class GradcamUtil:
 
         # 可視化(visualize_cam)は 1/255 + 4次元化 しないとおかしくなる
         x_orig = x_orig / 255
-        transform = A.Compose([A.Resize(height, width), ToTensorV2(p=1.0)], p=1.0)
+        transform = A.Compose(
+            [A.Resize(self.height, self.width), ToTensorV2(p=1.0)], p=1.0
+        )
         x_orig = transform(image=x_orig)["image"]
         x_orig = x_orig.unsqueeze(0)
 
