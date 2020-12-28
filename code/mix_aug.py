@@ -154,7 +154,7 @@ def snapmix(data, target, alpha=5.0, model=None):
         lam_a[torch.isnan(lam_a)] = lam
         lam_b[torch.isnan(lam_b)] = 1 - lam
 
-    targets = (target, target_b, lam_a, lam_b)
+    targets = (target, target_b, lam_a.to(device), lam_b.to(device))
 
     return data, targets
 

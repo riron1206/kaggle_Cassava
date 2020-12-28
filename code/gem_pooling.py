@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 # https://amaarora.github.io/2020/08/30/gempool.html
 # https://github.com/amaarora/amaarora.github.io/blob/master/nbs/GeM%20Pooling.ipynb
