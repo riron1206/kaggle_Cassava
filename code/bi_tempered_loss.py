@@ -1,6 +1,7 @@
 # Code taken from https://github.com/fhopfmueller/bi-tempered-loss-pytorch/blob/master/bi_tempered_loss_pytorch.py
 # https://www.kaggle.com/debarshichanda/cassava-bitempered-logistic-loss
 import torch
+import torch.nn as nn
 
 
 def log_t(u, t):
@@ -246,3 +247,28 @@ def bi_tempered_logistic_loss(
         return loss_values.sum()
     if reduction == "mean":
         return loss_values.mean()
+
+
+class BiTemperedLoss(nn.Module):
+    def __init__(self, t1=0.7, t2=1.3, reduction="mean", smoothing=0.0):
+        super().__init__()
+        self.t1 = t1
+        self.t2 = t2
+        self.reduction = reduction
+        self.smoothing = smoothing
+
+    def forward(self, inputs, targets):
+        loss = bi_tempered_logistic_loss(
+            activations=inputs,
+            labels=targets,
+            t1=self.t1,
+            t2=self.t2,
+            label_smoothing=self.smoothing,
+        )
+
+        if self.reduction == "sum":
+            loss = loss.sum()
+        elif self.reduction == "mean":
+            loss = loss.mean()
+
+        return loss
