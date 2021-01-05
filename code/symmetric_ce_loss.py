@@ -35,8 +35,8 @@ class SymmetricCrossEntropyLoss(nn.Module):
     def forward(self, outputs, targets, reduction="mean"):
         targets, targets_onehot = onehot(outputs, targets)
 
-        if self.label_smoothing > 0:
-            targets_onehot = label_smoothing(self.label_smoothing, targets_onehot)
+        if self.smoothing > 0:
+            targets_onehot = label_smoothing(self.smoothing, targets_onehot)
 
         ce_loss = F.cross_entropy(outputs, targets, reduction=reduction)
         rce_loss = (-targets_onehot * outputs.softmax(1).clamp(1e-7, 1.0).log()).sum(1)
