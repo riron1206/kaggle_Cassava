@@ -325,7 +325,21 @@ NUM_VALIDATION_IMAGES = len(VALID_FILENAMES)
 
 
 
+        #return {"train_loss": loss, "train_acc": acc}
 
+#    def training_epoch_end(self, training_step_outputs):   
+#        avg_loss = torch.stack(
+#            [x["train_loss"] for x in training_step_outputs]
+#        ).mean()
+#        avg_acc = torch.stack(
+#            [x["train_acc"] for x in training_step_outputs]
+#        ).mean()
+#
+#        if CFG.wandb_project is not None:
+#            self.logger.log_metrics({"avg_loss": avg_loss})
+#            self.logger.log_metrics({"avg_acc": avg_acc})
+#
+#        return {"train_loss": avg_loss, "train_acc": avg_acc}
 
 
 
