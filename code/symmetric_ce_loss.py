@@ -24,9 +24,9 @@ def label_smoothing(smoothing, targets_onehot):
     return targets_onehot
 
 
-class SymmetricCrossEntropy(nn.Module):
+class SymmetricCrossEntropyLoss(nn.Module):
     def __init__(self, num_classes=5, alpha=0.1, beta=1.0, smoothing=0.0):
-        super(SymmetricCrossEntropy, self).__init__()
+        super(SymmetricCrossEntropyLoss, self).__init__()
         self.alpha = alpha
         self.beta = beta
         self.num_classes = num_classes
