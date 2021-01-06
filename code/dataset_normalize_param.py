@@ -14,6 +14,8 @@ def dataset_normalize_param(df, batch_size=256, num_workers=0):
     """
     dfは file_path 列が必要
     メモリ足りない場合は batch_size 下げること
+    Usage:
+        mean, std = dataset_normalize_param(df)
     """
     torch_dataset = TMPDataset(df)
     dataloader = torch.utils.data.DataLoader(
