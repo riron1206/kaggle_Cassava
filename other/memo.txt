@@ -388,3 +388,23 @@ NUM_VALIDATION_IMAGES = len(VALID_FILENAMES)
             
         if CFG.wandb_project is not None:
             self.logger.log_metrics({"train_loss": loss, "train_acc": acc})
+            
+            
+
+
+
+
+
+
+        if len(y.shape) < len(y_hat.shape):  # not one-hot
+            y_soft = torch.zeros_like(y_hat)
+            y_soft.scatter_(1, y[..., None], 1)
+        else:
+            y_soft = y
+            y = torch.max(y_soft, 1)[1]
+        # -------- ƒ‰ƒxƒ‹one-hotŠm”F --------
+        if DEBUG:
+            print("y_hat:", y_hat[:5])
+            print("y_soft:", y_soft[:5])
+            print("y:", y[:5])
+        # -------------------------
