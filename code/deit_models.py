@@ -9,7 +9,7 @@ import timm
 from timm.models.vision_transformer import VisionTransformer, _cfg
 from timm.models.registry import register_model
 
-assert timm.__version__ == "0.3.2", "timm.__version__ == 0.3.2 じゃないとdeit使えない!!!"
+# assert timm.__version__ == "0.3.2", "timm.__version__ == 0.3.2 じゃないとdeit使えない!!!"
 
 
 @register_model
