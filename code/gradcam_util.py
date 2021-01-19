@@ -13,6 +13,10 @@ from albumentations.pytorch.transforms import ToTensorV2
 class GradcamUtil:
     """
     https://github.com/vickyliin/gradcam_plus_plus-pytorch でGrad-Cam
+
+    実行サンプル:
+    https://www.kaggle.com/anonamename/grad-cam-check
+
     Usage:
         a_transform = A.Compose(
             [
