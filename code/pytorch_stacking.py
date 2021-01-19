@@ -786,4 +786,40 @@ def set_random_seed(seed: int = 42, deterministic: bool = False):
         torch.backends.cudnn.deterministic = True  # type: ignore
 
 
+def run_train_one_fold(
+    settings, model, train_all_dataset, train_val_index, device, output_path
+):
+    """Run training for one fold"""
+    train_dataset = data.Subset(train_all_dataset, train_val_index[0])
+    val_dataset = data.Subset(train_all_dataset, train_val_index[1])
+    train_loader = data.DataLoader(train_dataset, **settings["loader"]["train"])
+    val_loader = data.DataLoader(val_dataset, **settings["loader"]["val"])
+    print("train: {}, val: {}".format(len(train_dataset), len(val_dataset)))
+
+    model.to(device)
+    optimizer = get_optimizer(settings, model)
+    scheduler = get_scheduler(settings, train_loader, optimizer)
+    loss_func = get_loss_function(settings)
+    loss_func.to(device)
+
+    eval_mgr = EvalFuncManager(
+        len(val_loader), {"loss": loss_func, "metric": MyLogLoss(),}
+    )
+
+    manager = get_manager(
+        settings,
+        model,
+        device,
+        train_loader,
+        val_loader,
+        optimizer,
+        eval_mgr,
+        output_path,
+    )
+
+    run_train_loop(
+        manager, settings, model, device, train_loader, optimizer, scheduler, loss_func
+    )
+
+
 ######################################################################################
