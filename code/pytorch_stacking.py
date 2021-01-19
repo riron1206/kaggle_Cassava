@@ -1,12 +1,24 @@
 # https://tawara.hatenablog.com/entry/2020/12/16/132415
 # https://www.kaggle.com/c/lish-moa/discussion/204685
 # https://www.kaggle.com/anonamename/stacking-test
-
-import re
+import os
+import gc
+import sys
+import random
+import shutil
+import warnings
 import typing as tp
+from pathlib import Path
+from copy import deepcopy
+
+import yaml
+import numpy as np
+import pandas as pd
+from sklearn.metrics import log_loss
 
 import torch
 from torch import nn
+from torch.utils import data
 
 
 def get_activation(activ_name: str = "relu"):
@@ -302,3 +314,476 @@ class GCNStacking(nn.Module):
         h = torch.reshape(H, (bs, -1))
         h = self.head(h)
         return h
+
+
+################################# for GCNs #################################
+def vector_wise_matmul(X: torch.Tensor, W: torch.Tensor) -> torch.Tensor:
+    """
+    See input matrixes X as bags of vectors, and multiply corresponding weight matrices by vector.
+
+    Args:
+        X: Input Tensor, shape: (batch_size, **n_vectors**, in_features)
+        W: Weight Tensor, shape: (**n_vectors**, out_features, in_features)
+    """
+    X = torch.transpose(X, 0, 1)  # shape: (n_vectors, batch_size, in_features)
+    W = torch.transpose(W, 1, 2)  # shape: (n_vectors, in_features, out_features)
+    H = torch.matmul(X, W)  # shape: (n_vectors, batch_size, out_features)
+    H = torch.transpose(H, 0, 1)  # shape: (batch_size, n_vectors, out_features)
+
+    return H
+
+
+def vector_wise_shared_matmul(X: torch.Tensor, W: torch.Tensor) -> torch.Tensor:
+    """
+    See input matrixes X as bags of vectors, and multiply **shared** weight matrices.
+
+    Args:
+        X: Input Tensor, shape: (batch_size, **n_vectors**, in_features)
+        W: Weight Tensor, shape: (out_features, in_features)
+    """
+    # W = torch.transpose(W, 0, 1)  # shape: (in_features, out_features)
+    # H = torch.matmul(X, W)        # shape: (batch_size, n_vectors, out_features)
+
+    H = nn.functional.linear(X, W)  # shape: (batch_size, n_vectors, out_features)
+
+    return H
+
+
+def _calculate_fan_in_and_fan_out_for_vwl(tensor) -> tp.Tuple[int]:
+    """
+    Input tensor: (n_vectors, out_features, in_features) or (out_features, in_features)
+    """
+    dimensions = tensor.dim()
+    if dimensions < 2:
+        raise ValueError(
+            "Fan in and fan out can not be computed for tensor with fewer than 2 dimensions"
+        )
+
+    fan_in = tensor.size(-1)
+    fan_out = tensor.size(-2)
+
+    return fan_in, fan_out
+
+
+def _calculate_correct_fan_for_vwl(tensor, mode) -> int:
+    """"""
+    mode = mode.lower()
+    valid_modes = ["fan_in", "fan_out"]
+    if mode not in valid_modes:
+        raise ValueError(
+            "Mode {} not supported, please use one of {}".format(mode, valid_modes)
+        )
+
+    fan_in, fan_out = _calculate_fan_in_and_fan_out_for_vwl(tensor)
+    return fan_in if mode == "fan_in" else fan_out
+
+
+def kaiming_uniform_for_vwl(tensor, a=0, mode="fan_in", nonlinearity="leaky_relu"):
+    """"""
+    fan = _calculate_correct_fan_for_vwl(tensor, mode)
+    gain = nn.init.calculate_gain(nonlinearity, a)
+    std = gain / np.sqrt(fan)
+    bound = np.sqrt(3.0) * std  # Calculate uniform bounds from standard deviation
+    with torch.no_grad():
+        return tensor.uniform_(-bound, bound)
+
+
+class VectorWiseLinear(nn.Module):
+    """
+    For mini batch which have several matrices,
+    see as these matrixes as bags of vectors, and multiply weight matrices by vector.
+
+    input    X: (batch_size, **n_vectors**, in_features)
+    weight W: (**n_vector**, out_features, in_features)
+    output  Y: (batch_size, **n_vectors**, out_features)
+
+    **Note**: For simplicity, bias is not described.
+
+    X and W are can be seen as below.
+    X: [
+            [vec_{ 1, 1}, vec_{ 1, 2}, ... vec_{ 1, n_vectors}],
+            [vec_{ 2, 1}, vec_{ 2, 2}, ... vec_{ 2, n_vectors}],
+                                            .
+                                            .
+            [vec_{bs, 1}, vec_{bs, 2}, ... vec_{bs, n_vectors}]
+        ]
+    W: [
+            Mat_{1}, Mat_{2}, ... , Mat_{n_vectors}
+        ]
+    Then Y is calclauted as:
+    Y: [
+        [ Mat_{1} vec_{ 1, 1}, Mat_{2} vec_{ 1, 2}, ... Mat_{n_vectors} vec_{ 1, n_vectors}],
+        [ Mat_{1} vec_{ 2, 1}, Mat_{2} vec_{ 2, 2}, ... Mat_{n_vectors} vec_{ 2, n_vectors}],
+        .
+        .
+        [ Mat_{1} vec_{bs, 1}, Mat_{2} vec_{bs, 2}, ... Mat_{n_vectors} vec_{bs, n_vectors}],
+    ]
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        n_vectors: int,
+        bias: bool = True,
+        weight_shared: bool = True,
+    ) -> None:
+        """Initialize."""
+        super(VectorWiseLinear, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.n_vectors = n_vectors
+        self.weight_shared = weight_shared
+
+        if self.weight_shared:
+            self.weight = nn.Parameter(
+                torch.Tensor(self.out_features, self.in_features)
+            )
+            self.matmul_func = vector_wise_shared_matmul
+        else:
+            self.weight = nn.Parameter(
+                torch.Tensor(self.n_vectors, self.out_features, self.in_features)
+            )
+            self.matmul_func = vector_wise_matmul
+
+        if bias:
+            self.bias = nn.Parameter(torch.Tensor(out_features))
+        else:
+            self.register_parameter("bias", None)
+
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        """Initialize weight and bias."""
+        kaiming_uniform_for_vwl(self.weight, a=np.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = _calculate_fan_in_and_fan_out_for_vwl(self.weight)
+            bound = 1 / np.sqrt(fan_in)
+            nn.init.uniform_(self.bias, -bound, bound)
+
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        """Forward."""
+        H = self.matmul_func(X, self.weight)
+        if self.bias is not None:
+            H = H + self.bias
+
+        return H
+
+
+class GraphConv(nn.Module):
+    """Basic Graph Convolution Layer."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        n_nodes: int,
+        shrare_msg: bool = True,
+        model_self: bool = True,
+        share_model_self: bool = True,
+        bias: bool = True,
+        share_bias: bool = True,
+    ) -> None:
+        """Intialize."""
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.n_nodes = n_nodes
+        self.model_self = model_self
+        super(GraphConv, self).__init__()
+
+        # # message
+        self.msg = VectorWiseLinear(
+            in_channels, out_channels, n_nodes, False, shrare_msg
+        )
+
+        # # self-modeling
+        if model_self:
+            self.model_self = VectorWiseLinear(
+                in_channels, out_channels, n_nodes, False, share_model_self
+            )
+
+        # # bias
+        if bias:
+            if share_bias:
+                self.bias = nn.Parameter(torch.Tensor(out_channels))
+            else:
+                self.bias = nn.Parameter(torch.Tensor(n_nodes, out_channels))
+            bound = 1 / np.sqrt(out_channels)
+            nn.init.uniform_(self.bias, -bound, bound)
+        else:
+            self.register_parameter("bias", None)
+
+    def forward(
+        self, X: torch.Tensor, A: torch.Tensor, W: torch.Tensor = None
+    ) -> torch.Tensor:
+        """Forward.
+
+        Args:
+            X: (batch_size, n_nodes, n_channels)
+                Array which represents bags of vectors.
+                X[:, i, :] are corresponded to feature vectors of node i.
+            A: (batch_size, n_nodes, n_nodes)
+                Array which represents adjacency matrices.
+                A[:, i, j] are corresponded to weights (scalar) of edges from node j to node i.
+            W: (batch_size, n_nodes, n_nodes)
+                Array which represents weight matrices between nodes.
+        """
+        if W is not None:
+            A = A * W  # shape: (batch_size, n_nodes, n_nodes)
+
+        # # update message
+        M = X  #  shape: (batch_size, n_nodes, in_channels)
+        # # # send message
+        M = self.msg(M)  # shape: (batch_size, n_nodes, out_channels)
+        # # # aggregate
+        M = torch.matmul(A, M)  # shape: (batch_size, n_nodes, out_channels)
+
+        # # update node
+        # # # self-modeling
+        H = M
+        if self.model_self:
+            H = H + self.model_self(X)
+        if self.bias is not None:
+            H = H + self.bias
+
+        return H
+
+
+######################################################################################
+
+################################# utils for training #################################
+class EvalFuncManager(nn.Module):
+    """Manager Class for evaluation at the end of epoch"""
+
+    def __init__(
+        self,
+        iters_per_epoch: int,
+        evalfunc_dict: tp.Dict[str, nn.Module],
+        prefix: str = "val",
+    ) -> None:
+        """Initialize"""
+        super(EvalFuncManager, self).__init__()
+        self.tmp_iter = 0
+        self.iters_per_epoch = iters_per_epoch
+        self.prefix = prefix
+        self.metric_names = []
+        for k, v in evalfunc_dict.items():
+            setattr(self, k, v)
+            self.metric_names.append(k)
+        self.reset()
+
+    def reset(self) -> None:
+        """Reset State."""
+        self.tmp_iter = 0
+        for name in self.metric_names:
+            getattr(self, name).reset()
+
+    def __call__(self, y: torch.Tensor, t: torch.Tensor) -> None:
+        """Forward."""
+        for name in self.metric_names:
+            getattr(self, name).update(y, t)
+        self.tmp_iter += 1
+
+        if self.tmp_iter == self.iters_per_epoch:
+            # ppe.reporting.report(
+            #    {
+            #        "{}/{}".format(self.prefix, name): getattr(self, name).compute()
+            #        for name in self.metric_names
+            #    }
+            # )
+            self.reset()
+
+
+class MeanLoss(nn.Module):
+    def __init__(self):
+        super(MeanLoss, self).__init__()
+        self.loss_sum = 0
+        self.n_examples = 0
+
+    def forward(self, y: torch.Tensor, t: torch.Tensor):
+        """Compute metric at once"""
+        return self.loss_func(y, t)
+
+    def reset(self):
+        """Reset state"""
+        self.loss_sum = 0
+        self.n_examples = 0
+
+    def update(self, y: torch.Tensor, t: torch.Tensor):
+        """Update metric by mini batch"""
+        self.loss_sum += self(y, t).item() * y.shape[0]
+        self.n_examples += y.shape[0]
+
+    def compute(self):
+        """Compute metric for dataset"""
+        return self.loss_sum / self.n_examples
+
+
+class MyLogLoss(MeanLoss):
+    def __init__(self, **params):
+        super(MyLogLoss, self).__init__()
+        self.loss_func = nn.BCEWithLogitsLoss(**params)
+
+
+class LSBCEWithLogitsLoss(nn.Module):
+    """"""
+
+    def __init__(self, k: int, alpha: float = 0.01):
+        """"""
+        super(LSBCEWithLogitsLoss, self).__init__()
+        self.k = k
+        self.alpha = alpha
+        self.loss_func = nn.BCEWithLogitsLoss()
+
+    def forward(self, y, t):
+        """"""
+        t_s = t * (1 - self.alpha) + self.alpha / self.k
+        loss = self.loss_func(y, t_s)
+        return loss
+
+
+class MyLSLogLoss(MeanLoss):
+    def __init__(self, **params):
+        super(MyLSLogLoss, self).__init__()
+        self.loss_func = LSBCEWithLogitsLoss(**params)
+
+
+def run_train_loop(
+    manager, args, model, device, train_loader, optimizer, scheduler, loss_func
+):
+    """Run minibatch training loop"""
+    while not manager.stop_trigger:
+        model.train()
+        for batch in train_loader:
+            x, t = batch
+            with manager.run_iteration():
+                optimizer.zero_grad()
+                y = model(x.to(device))
+                loss = loss_func(y, t.to(device))
+                # ppe.reporting.report({"train/loss": loss.item()})
+                loss.backward()
+                optimizer.step()
+            if scheduler is not None:
+                scheduler.step()
+
+
+def run_eval(args, model, device, batch, eval_manager):
+    """Run evaliation for val or test. this function is applied to each batch."""
+    model.eval()
+    x, t = batch
+    y = model(x.to(device))
+    eval_manager(y, t.to(device))
+
+
+def get_optimizer(settings, model):
+    optimizer = getattr(torch.optim, settings["optimizer"]["name"])(
+        model.parameters(), **settings["optimizer"]["params"]
+    )
+    return optimizer
+
+
+def get_scheduler(settings, train_loader, optimizer):
+    if settings["scheduler"]["name"] is None:
+        scheduler = None
+    else:
+        if settings["scheduler"]["name"] == "OneCycleLR":
+            settings["scheduler"]["params"]["epochs"] = settings["globals"]["max_epoch"]
+            settings["scheduler"]["params"]["steps_per_epoch"] = len(train_loader)
+
+        scheduler = getattr(torch.optim.lr_scheduler, settings["scheduler"]["name"])(
+            optimizer, **settings["scheduler"]["params"]
+        )
+    return scheduler
+
+
+def get_loss_function(settings):
+    if hasattr(nn, settings["loss"]["name"]):
+        loss_func = getattr(nn, settings["loss"]["name"])(**settings["loss"]["params"])
+    else:
+        loss_func = eval(settings["loss"]["name"])(**settings["loss"]["params"])
+    return loss_func
+
+
+# def get_manager(
+#    settings,
+#    model,
+#    device,
+#    train_loader,
+#    val_loader,
+#    optimizer,
+#    eval_manager,
+#    output_path,
+# ):
+#    trigger = ppe.training.triggers.EarlyStoppingTrigger(
+#        check_trigger=(1, "epoch"),
+#        monitor="val/metric",
+#        mode="min",
+#        patience=settings["globals"]["patience"],
+#        verbose=True,
+#        max_trigger=(settings["globals"]["max_epoch"], "epoch"),
+#    )
+#
+#    manager = ppe.training.ExtensionsManager(
+#        model,
+#        optimizer,
+#        settings["globals"]["max_epoch"],
+#        iters_per_epoch=len(train_loader),
+#        stop_trigger=trigger,
+#        out_dir=output_path,
+#    )
+#
+#    log_extentions = [
+#        ppe_extensions.observe_lr(optimizer=optimizer),
+#        ppe_extensions.LogReport(),
+#        ppe_extensions.PlotReport(
+#            ["train/loss", "val/loss"], "epoch", filename="loss.png"
+#        ),
+#        ppe_extensions.PlotReport(["lr"], "epoch", filename="lr.png"),
+#        ppe_extensions.PrintReport(
+#            [
+#                "epoch",
+#                "iteration",
+#                "lr",
+#                "train/loss",
+#                "val/loss",
+#                "val/metric",
+#                "elapsed_time",
+#            ]
+#        ),
+#    ]
+#    for ext in log_extentions:
+#        manager.extend(ext)
+#
+#    manager.extend(  # evaluation
+#        ppe_extensions.Evaluator(
+#            val_loader,
+#            model,
+#            eval_func=lambda *batch: run_eval(
+#                settings, model, device, batch, eval_manager
+#            ),
+#        ),
+#        trigger=(1, "epoch"),
+#    )
+#
+#    manager.extend(  # model snapshot
+#        ppe_extensions.snapshot(target=model, filename="snapshot_epoch_{.epoch}.pth"),
+#        trigger=ppe.training.triggers.MinValueTrigger(
+#            key="val/metric", trigger=(1, "epoch")
+#        ),
+#    )
+#
+#    return manager
+
+
+def set_random_seed(seed: int = 42, deterministic: bool = False):
+    """Set seeds"""
+    random.seed(seed)
+    np.random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)  # type: ignore
+    if deterministic:
+        torch.backends.cudnn.deterministic = True  # type: ignore
+
+
+######################################################################################
