@@ -180,15 +180,17 @@ class LitStackingModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch["x"].float(), batch["y"]
 
-        if CFG.gauss_scale > 0.0:
+        if self.CFG.gauss_scale > 0.0:
             # 過学習防ぐためにガウシアンノイズ加算
             # https://www.kaggle.com/c/stanford-covid-vaccine/discussion/189709
-            x = x + np.random.normal(0.0, scale=CFG.gauss_scale)  # 平均=0, 標準偏差はパラメータで変更
+            x = x + np.random.normal(
+                0.0, scale=self.CFG.gauss_scale
+            )  # 平均=0, 標準偏差はパラメータで変更
 
-        if CFG.cutmix_p > 0.0:
+        if self.CFG.cutmix_p > 0.0:
             # cutmix for table
             x, y = cutmix_for_tabular(
-                x, y, alpha=CFG.alpha, p=CFG.cutmix_p, random_state=None
+                x, y, alpha=self.CFG.alpha, p=self.CFG.cutmix_p, random_state=None
             )
 
         if self.CFG.train_loss_name == "SmoothCrossEntropyLoss":
