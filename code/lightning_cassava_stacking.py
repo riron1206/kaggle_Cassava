@@ -30,6 +30,7 @@ if os.getcwd() in ["/kaggle/working", "/content"]:
 else:
     sys.path.append(r"C:\Users\81908\MyGitHub\kaggle_Cassava\code")
 
+from mix_aug_table import cutmix_for_tabular
 from smooth_ce_loss import SmoothCrossEntropyLoss
 from bi_tempered_loss import BiTemperedLoss
 from pytorch_stacking import (
@@ -50,10 +51,10 @@ class StackingDatasetMLP(Dataset):
         x = self.x[index]
         y = self.y[index]
 
-        ## 過学習防ぐためにラベルにガウシアンノイズ加算
+        ## 過学習防ぐためにガウシアンノイズ加算
         ## https://www.kaggle.com/c/stanford-covid-vaccine/discussion/189709
         # if noise_scale > 0.0:
-        #    y = y + np.random.normal(0.0, scale=noise_scale)
+        #    x = x + np.random.normal(0.0, scale=noise_scale)
 
         return {"x": x, "y": y}
 
@@ -78,10 +79,10 @@ class StackingDatasetCNN(Dataset):
         x = self.x[index][..., self.model_order]
         y = self.y[index]
 
-        ## 過学習防ぐためにラベルにガウシアンノイズ加算
+        ## 過学習防ぐためにガウシアンノイズ加算
         ## https://www.kaggle.com/c/stanford-covid-vaccine/discussion/189709
         # if noise_scale > 0.0:
-        #    y = y + np.random.normal(0.0, scale=noise_scale)
+        #    x = x + np.random.normal(0.0, scale=noise_scale)
 
         return {"x": x, "y": y}
 
@@ -189,6 +190,17 @@ class LitStackingModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch["x"].float(), batch["y"]
 
+        if CFG.gauss_scale > 0.0:
+            # 過学習防ぐためにガウシアンノイズ加算
+            # https://www.kaggle.com/c/stanford-covid-vaccine/discussion/189709
+            x = x + np.random.normal(0.0, scale=CFG.gauss_scale)  # 平均=0, 標準偏差はパラメータで変更
+
+        if CFG.cutmix_p > 0.0:
+            # cutmix for table
+            x, y = cutmix_for_tabular(
+                x, y, alpha=CFG.alpha, p=CFG.cutmix_p, random_state=None
+            )
+
         if self.CFG.train_loss_name == "SmoothCrossEntropyLoss":
             loss_fn = SmoothCrossEntropyLoss(smoothing=self.CFG.smoothing).to(
                 self.CFG.device
@@ -197,8 +209,8 @@ class LitStackingModel(pl.LightningModule):
             loss_fn = BiTemperedLoss(
                 t1=self.CFG.t1, t2=self.CFG.t2, smoothing=self.CFG.smoothing
             ).to(self.CFG.device)
-        else:
-            loss_fn = nn.CrossEntropyLoss().to(self.CFG.device)
+        # else:
+        #    loss_fn = nn.CrossEntropyLoss().to(self.CFG.device)
 
         y_hat = self(x.float())
         loss = loss_fn(y_hat, y)
