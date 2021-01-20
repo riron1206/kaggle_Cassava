@@ -51,11 +51,6 @@ class StackingDatasetMLP(Dataset):
         x = self.x[index]
         y = self.y[index]
 
-        ## 過学習防ぐためにガウシアンノイズ加算
-        ## https://www.kaggle.com/c/stanford-covid-vaccine/discussion/189709
-        # if noise_scale > 0.0:
-        #    x = x + np.random.normal(0.0, scale=noise_scale)
-
         return {"x": x, "y": y}
 
     def __len__(self):
@@ -78,11 +73,6 @@ class StackingDatasetCNN(Dataset):
     def __getitem__(self, index):
         x = self.x[index][..., self.model_order]
         y = self.y[index]
-
-        ## 過学習防ぐためにガウシアンノイズ加算
-        ## https://www.kaggle.com/c/stanford-covid-vaccine/discussion/189709
-        # if noise_scale > 0.0:
-        #    x = x + np.random.normal(0.0, scale=noise_scale)
 
         return {"x": x, "y": y}
 
