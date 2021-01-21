@@ -19,8 +19,13 @@ def freeze_until(net, n_freeze_until=0):
 
 def freeze_bn(net):
     """バッチノーマライゼーションの重み凍結
-    https://discuss.pytorch.org/t/how-to-freeze-bn-layers-while-training-the-rest-of-network-mean-and-var-wont-freeze/89736"""
-    for m in net.modules():
-        if isinstance(m, nn.BatchNorm2d):
-            m.eval()
-    return net
+    https://discuss.pytorch.org/t/how-to-freeze-bn-layers-while-training-the-rest-of-network-mean-and-var-wont-freeze/89736
+    https://www.kaggle.com/yingpengchen/pytorch-cldc-train-with-vit
+    """
+    try:
+        for m in net.modules():
+            if isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.LayerNorm):
+                m.eval()
+    except ValuError:
+        print("error with batchnorm2d or layernorm")
+        return
