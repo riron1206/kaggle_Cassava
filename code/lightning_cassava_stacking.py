@@ -43,22 +43,22 @@ from pytorch_stacking import (
 
 
 class StackingDatasetMLP(Dataset):
-    def __init__(self, x, y):
+    def __init__(self, x, y=None):
         self.x = x
         self.y = y
 
     def __getitem__(self, index):
-        x = self.x[index]
-        y = self.y[index]
-
-        return {"x": x, "y": y}
+        if self.y is not None:
+            return {"x": self.x[index], "y": self.y[index]}
+        else:
+            return {"x": self.x[index]}
 
     def __len__(self):
-        return len(self.y)
+        return len(self.x)
 
 
 class StackingDatasetCNN(Dataset):
-    def __init__(self, x, y):
+    def __init__(self, x, y=None):
         self.x = x
         self.y = y
         self.reset_model_order()
@@ -72,12 +72,13 @@ class StackingDatasetCNN(Dataset):
 
     def __getitem__(self, index):
         x = self.x[index][..., self.model_order]
-        y = self.y[index]
-
-        return {"x": x, "y": y}
+        if self.y is not None:
+            return {"x": x, "y": self.y[index]}
+        else:
+            return {"x": x}
 
     def __len__(self):
-        return len(self.y)
+        return len(self.x)
 
 
 class StackingDataModule(pl.LightningDataModule):
