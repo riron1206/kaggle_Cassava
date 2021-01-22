@@ -193,7 +193,7 @@ class CassavaLite(pl.LightningModule):
 
         self.use_amp = True  # apex amp を有効にする(16-bit mixed precision) https://pytorch-lightning.readthedocs.io/en/stable/lightning_module.html
 
-        self.net = timm.create_model(CFG.arch, pretrained=True)
+        self.net = timm.create_model(CFG.arch, pretrained=CFG.pretrained)
 
         if CFG.model_path is not None:
             # 学習済みモデルファイル指定ある場合ロード
