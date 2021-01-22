@@ -13,6 +13,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.metrics import accuracy_score, log_loss
+from colorama import Fore
 
 import torch
 import torch.nn as nn
@@ -74,19 +76,183 @@ from sharpen import sharpen
 from dataset_normalize_param import dataset_normalize_param
 
 
+name_mapping = {
+    0: "Cassava Bacterial Blight (CBB)",
+    1: "Cassava Brown Streak Disease (CBSD)",
+    2: "Cassava Green Mottle (CGM)",
+    3: "Cassava Mosaic Disease (CMD)",
+    4: "Healthy",
+}
+
+
+class Config:
+    def __init__(self):
+        max_epochs = 11
+        self.seeds = [42]
+        self.n_classes = 5
+        self.max_epochs = max_epochs
+        self.patience = max_epochs - 1
+        self.n_splits = 5
+        self.shuffle = True
+        self.batch_size = 16
+        self.accumulate_grad_batches = (
+            2  # https://www.kaggle.com/yingpengchen/pytorch-cldc-train-with-vit
+        )
+        self.height = 384
+        self.width = 384
+        self.arch = "vit_base_patch32_384"  # "vit_large_patch16_384"
+        self.opt = "adam"
+        self.lr_scheduler = "CosineAnnealingWarmRestarts"
+        self.T_max = max_epochs
+        self.T_0 = max_epochs
+        self.lr = 1e-4
+        self.min_lr = 1e-6
+        self.weight_decay = 1e-6
+        self.smoothing = (
+            0.3  # https://www.kaggle.com/yingpengchen/pytorch-cldc-train-with-vit
+        )
+        self.train_loss_name = "BiTemperedLoss"
+        self.t1 = 0.8
+        self.t2 = 1.4
+        self.n_tta = 5
+        self.gem_p = 0  # GemPooling
+        # self.mix_decision_th = 0.5  # cutmixなどの発生確率
+        self.mix_decision_th = 0.0
+        # self.mixmethod = "cutmix"
+        self.mixmethod = ""
+        self.mix_alpha = 1.0
+        self.is_over_sample = False
+        self.is_under_sample = False
+        self.n_over = 0  # train set を倍々するか
+        self.is_only_first_fold = False  # 1foldだけ学習するか
+        self.is_onehot_label = False  # onehotの形式でラベル渡すか
+        self.is_balanced_batch = (
+            False  # balanced_batch 1epoch当たりのstep数は2倍以上になるので学習時間も増える
+        )
+        # self.wandb_project = "kaggle_cassava"  # wandb
+        self.wandb_project = None
+        self.is_lr_find = False  # 学習率探索
+        self.is_old_compe_train = False  # 過去コンペのデータ追加
+        self.monitor = "val_acc"  # ModelCheckpoint
+        self.pretrained = True
+        self.freeze_bn_epochs = 5  # freeze bn weights before epochs  https://www.kaggle.com/yingpengchen/pytorch-cldc-train-with-vit
+        self.device = "cuda"
+        self.num_workers = 0
+
+
+def get_transforms(CFG):
+    data_transforms = {
+        "train": A.Compose(
+            [
+                # A.Resize(CFG.height, CFG.width),
+                A.RandomResizedCrop(CFG.height, CFG.width),
+                A.Transpose(p=0.5),
+                A.HorizontalFlip(p=0.5),
+                A.VerticalFlip(p=0.5),
+                A.ShiftScaleRotate(p=0.5),
+                A.HueSaturationValue(
+                    hue_shift_limit=0.2, sat_shift_limit=0.2, val_shift_limit=0.2, p=0.5
+                ),
+                A.RandomBrightnessContrast(
+                    brightness_limit=(-0.1, 0.1), contrast_limit=(-0.1, 0.1), p=0.5
+                ),
+                A.Normalize(
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225],
+                    max_pixel_value=255.0,
+                    p=1.0,
+                ),
+                A.CoarseDropout(p=0.5),
+                A.Cutout(p=0.5),
+                ToTensorV2(),
+            ],
+            p=1.0,
+        ),
+        "valid": A.Compose(
+            [
+                # A.Resize(CFG.height, CFG.width),
+                A.CenterCrop(CFG.height, CFG.width, p=1.0),
+                A.Resize(CFG.height, CFG.width),
+                A.Normalize(
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225],
+                    max_pixel_value=255.0,
+                    p=1.0,
+                ),
+                ToTensorV2(),
+            ],
+            p=1.0,
+        ),
+        "test": A.Compose(
+            [
+                # A.Resize(CFG.height, CFG.width),
+                A.RandomResizedCrop(CFG.height, CFG.width),
+                A.Transpose(p=0.5),
+                A.HorizontalFlip(p=0.5),
+                A.VerticalFlip(p=0.5),
+                A.ShiftScaleRotate(p=0.5),
+                A.HueSaturationValue(
+                    hue_shift_limit=0.2, sat_shift_limit=0.2, val_shift_limit=0.2, p=0.5
+                ),
+                A.RandomBrightnessContrast(
+                    brightness_limit=(-0.1, 0.1), contrast_limit=(-0.1, 0.1), p=0.5
+                ),
+                A.Normalize(
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225],
+                    max_pixel_value=255.0,
+                    p=1.0,
+                ),
+                ToTensorV2(),
+            ],
+            p=1.0,
+        ),
+    }
+    return data_transforms
+
+
+def set_seed(seed: int = 42) -> None:
+    np.random.seed(seed)
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+
+def inference_one_epoch(model, data_loader, device):
+    model.eval()
+    image_preds_all = []
+    with torch.no_grad():  # 勾配計算を無効にしてメモリ効率化
+        for step, batch in enumerate(data_loader):
+            imgs = batch["x"].to(device).float()
+            model = model.to(device)
+            image_preds = model(imgs)
+            image_preds_all += [torch.softmax(image_preds, 1).detach().cpu().numpy()]
+    image_preds_all = np.concatenate(image_preds_all, axis=0)
+    return image_preds_all
+
+
+def check_oof(y):
+    y_ = Fore.YELLOW
+    Y_oof = pickle.load(open(f"Y_pred.pkl", "rb"))
+    Y_tta_oof = pickle.load(open(f"Y_pred_tta.pkl", "rb"))
+    oof = accuracy_score(y, Y_oof.values.argmax(1))
+    oof_tta = accuracy_score(y, Y_tta_oof.values.argmax(1))
+    oof_loss = log_loss(y, Y_oof.values)
+    oof_loss_tta = log_loss(y, Y_tta_oof.values)
+    print(y_, f"oof:", round(oof, 4))
+    print(y_, f"oof_tta:", round(oof_tta, 4))
+    print(y_, f"oof_loss:", round(oof_loss, 4))
+    print(y_, f"oof_loss_tta:", round(oof_loss_tta, 4))
+    return oof, oof_tta, oof_loss, oof_loss_tta
+
+
 class CassavaDataset(Dataset):
     def __init__(
-        self,
-        df: pd.DataFrame,
-        train: bool = True,
-        transforms=None,
-        name_mapping={
-            0: "Cassava Bacterial Blight (CBB)",
-            1: "Cassava Brown Streak Disease (CBSD)",
-            2: "Cassava Green Mottle (CGM)",
-            3: "Cassava Mosaic Disease (CMD)",
-            4: "Healthy",
-        },
+        self, df: pd.DataFrame, train: bool = True, transforms=None,
     ):
         self.df = df
         self.train = train
@@ -103,9 +269,9 @@ class CassavaDataset(Dataset):
 
         if self.train:
             y = self.df.iloc[index]["label"]
-            y_soft = self.df.iloc[index][
-                list(self.name_mapping.values())
-            ].values.astype(np.float32)
+            y_soft = self.df.iloc[index][list(name_mapping.values())].values.astype(
+                np.float32
+            )
             return {"x": x, "y": y, "y_soft": y_soft}
         else:
             return {"x": x}
@@ -395,3 +561,235 @@ class CassavaLite(pl.LightningModule):
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
         self.log("val_acc", acc, on_epoch=True, prog_bar=True, logger=True)
         return {"val_loss": loss, "val_acc": acc}
+
+
+def run_train(
+    df, data_transforms, CFG, wandb_logger=None, old_compe_df=None,
+):
+    print(f"df.shape:", df.shape)
+    print("wandb_logger:", wandb_logger)
+    print(f"CFG: {CFG.__dict__}")
+
+    Y_pred = pd.DataFrame(
+        np.zeros((df.shape[0], CFG.n_classes)),
+        columns=name_mapping.values(),
+        index=df.index,
+    )
+    Y_pred_tta = Y_pred.copy()
+
+    for i in CFG.seeds:
+        set_seed(seed=i)
+        pl.seed_everything(i)
+
+        cv = StratifiedKFold(n_splits=CFG.n_splits, shuffle=CFG.shuffle, random_state=i)
+
+        for j, (train_idx, valid_idx) in enumerate(cv.split(df, df["label"])):
+
+            if CFG.is_only_first_fold:
+                if j > 0:
+                    break
+
+            train_df, valid_df = df.iloc[train_idx], df.iloc[valid_idx]
+
+            if CFG.is_over_sample:
+                train_df = imblearn_over_sampling(
+                    train_df, train_df["label"], random_state=i, is_plot=False
+                )
+            elif CFG.is_under_sample:
+                train_df = imblearn_under_sampling(
+                    train_df, train_df["label"], random_state=i, is_plot=False
+                )
+            elif CFG.n_over > 0:
+                # マイナークラスのみover sampling
+                train_df = minor_class_over_sample(
+                    train_df, n_over=CFG.n_over, is_plot=False
+                )
+
+            if CFG.is_old_compe_train:
+                # 過去コンペのデータすべてtrainに入れる
+                train_df = train_df.append(old_compe_df, ignore_index=True)
+
+            dm = CassavaDataModule(train_df, valid_df, data_transforms, CFG)
+
+            trainer_params = {
+                "max_epochs": CFG.max_epochs,
+                "deterministic": True,  # cudaの乱数固定
+            }
+            trainer_params[
+                "accumulate_grad_batches"
+            ] = CFG.accumulate_grad_batches  # 勾配をnバッチ分溜めてから誤差逆伝播
+            early_stopping = EarlyStopping("val_loss", patience=CFG.patience)
+            if CFG.monitor == "val_loss":
+                model_checkpoint = ModelCheckpoint(
+                    monitor="val_loss", save_top_k=1, mode="min"
+                )
+            else:
+                model_checkpoint = ModelCheckpoint(
+                    monitor="val_acc", save_top_k=1, mode="max"
+                )
+            trainer_params["callbacks"] = [model_checkpoint, early_stopping]
+
+            if CFG.device == "cuda":
+                trainer_params["gpus"] = 1
+            if type(CFG.device) != str:
+                trainer_params["tpu_cores"] = 1  # xm.xrt_world_size()
+                trainer_params["precision"] = 16
+
+            if CFG.wandb_project is not None:
+                trainer = pl.Trainer(logger=wandb_logger, **trainer_params)
+            else:
+                trainer = pl.Trainer(**trainer_params)
+
+            if CFG.is_lr_find:
+                # 学習率探索
+                lr_finder = trainer.tuner.lr_find(CassavaLite(CFG), dm)
+                suggested_lr = lr_finder.suggestion()
+                fig = lr_finder.plot()
+                plt.title(f"suggested_lr: {suggested_lr}")
+                fig.show()
+                fig.savefig("lr_finder.png")
+                break
+            else:
+                # 学習実行
+                trainer.fit(CassavaLite(CFG), dm)
+
+            shutil.copy(
+                trainer.checkpoint_callback.best_model_path,
+                f"model_seed_{i}_fold_{j}.ckpt",
+            )
+
+            # torch.save(model, PATH)
+
+            # ---------- val predict ---------
+            pretrained_model = CassavaLite(CFG).load_from_checkpoint(
+                trainer.checkpoint_callback.best_model_path
+            )
+            with torch.no_grad():  # 勾配計算を無効してメモリ効率化
+                for _ in range(CFG.n_tta):
+                    Y_pred.iloc[valid_idx] += (
+                        inference_one_epoch(
+                            pretrained_model, dm.val_dataloader(), CFG.device
+                        )
+                        / CFG.n_tta
+                    )
+            val_loss = metrics.log_loss(valid_df.label.values, Y_pred.iloc[valid_idx])
+            val_acc = (
+                valid_df.label.values
+                == np.argmax(Y_pred.iloc[valid_idx].values, axis=1)
+            ).mean()
+            print(f"fold {j} validation loss = {val_loss}")
+            print(f"fold {j} validation accuracy = {val_acc}\n")
+
+            with torch.no_grad():
+                for _ in range(CFG.n_tta):
+                    Y_pred_tta.iloc[valid_idx] += (
+                        inference_one_epoch(
+                            pretrained_model, dm.val_tta_dataloader(), device
+                        )
+                        / CFG.n_tta
+                    )
+            val_loss_tta = metrics.log_loss(
+                valid_df.label.values, Y_pred_tta.iloc[valid_idx]
+            )
+            val_acc_tta = (
+                valid_df.label.values
+                == np.argmax(Y_pred_tta.iloc[valid_idx].values, axis=1)
+            ).mean()
+            print(f"fold {j} validation tta loss = {val_loss_tta}")
+            print(f"fold {j} validation tta accuracy = {val_acc_tta}\n")
+
+            print("-" * 100)
+
+            del pretrained_model
+            torch.cuda.empty_cache()  # 空いているキャッシュメモリを解放してGPUメモリの断片化を減らす
+
+    pickle.dump(Y_pred, open("Y_pred.pkl", "wb"))
+    pickle.dump(Y_pred_tta, open("Y_pred_tta.pkl", "wb"))
+
+    if CFG.is_only_first_fold:
+        oof, oof_tta = val_acc, val_acc_tta
+        oof_loss, oof_loss_tta = val_loss, val_loss_tta
+    else:
+        oof, oof_tta, oof_loss, oof_loss_tta = check_oof(df["label"].values)
+
+    if wandb_logger is not None:
+        wandb_logger.log_metrics(
+            {
+                "oof": oof,
+                "oof_tta": oof_tta,
+                "oof_loss": oof_loss,
+                "oof_loss_tta": oof_loss_tta,
+            }
+        )
+
+    return oof, oof_tta, oof_loss, oof_loss_tta
+
+
+def main(df):
+    CFG = Config()
+    with open("cfg.yaml", "w") as wf:
+        yaml.dump(CFG.__dict__, wf)
+
+    if CFG.wandb_project is not None:
+        # 環境変数 WANDB_API_KEY に API キーをセット  https://github.com/MLHPC/wandb_tutorial
+        os.environ["WANDB_API_KEY"] = "ace10b29622f5bd54e16d665a4b7c485e2094353"
+        wandb_logger = WandbLogger(
+            name=f"tf_efficientnet_b4_ns_fold10_{str(datetime.now().strftime('%Y/%m/%d_%H:%M'))}",
+            project=CFG.wandb_project,
+        )
+        wandb_logger.log_hyperparams(params=CFG.__dict__)
+    else:
+        wandb_logger = None
+
+    data_transforms = get_transforms(CFG)
+
+    oof, oof_tta, oof_loss, oof_loss_tta = run_train(
+        df, data_transforms, CFG, wandb_logger=wandb_logger
+    )
+
+    Y_pred = pickle.load(open("Y_pred.pkl", "rb"))
+    oof_preds_df = pd.DataFrame(
+        {
+            "target": df["label"],
+            "prediction": Y_pred.values.argmax(1),
+            "logit": Y_pred.values.max(1),
+            "file_path": df["file_path"],
+        }
+    )
+    oof_preds_df.to_csv("oof_preds_df.csv", index=False)
+    # display(oof_preds_df)
+
+    Y_pred_tta = pickle.load(open("Y_pred_tta.pkl", "rb"))
+    oof_preds_df = pd.DataFrame(
+        {
+            "target": df["label"],
+            "prediction": Y_pred_tta.values.argmax(1),
+            "logit": Y_pred_tta.values.max(1),
+            "file_path": df["file_path"],
+        }
+    )
+    oof_preds_df.to_csv("oof_preds_df_tta.csv", index=False)
+    # display(oof_preds_df)
+
+    sns.countplot(y=sorted(oof_preds_df["prediction"].map(name_mapping)), orient="v")
+    plt.title("Prediction distribution")
+    plt.show()
+
+    print(
+        metrics.classification_report(
+            oof_preds_df["target"], oof_preds_df["prediction"]
+        )
+    )
+
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(
+        metrics.confusion_matrix(oof_preds_df["target"], oof_preds_df["prediction"]),
+        annot=True,
+        cmap="Blues",
+    )
+    plt.title("Oof confusion_matrix")
+    plt.show()
+
+
+if __name__ == "__main__":
+    pass
