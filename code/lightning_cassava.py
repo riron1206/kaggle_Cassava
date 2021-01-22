@@ -55,7 +55,7 @@ else:
     # sys.path.append(r"C:\Users\shingo\jupyter_notebook\pytorch_lightning_work\kaggle_Cassava\kaggle_Cassava\code")
 
 from gem_pooling import GeM, GeMNet
-from symmetric_ce_loss import SmoothCrossEntropyLoss
+from smooth_ce_loss import SmoothCrossEntropyLoss
 from bi_tempered_loss import BiTemperedLoss
 from symmetric_ce_loss import SymmetricCrossEntropyLoss
 from mix_aug import cutmix, fmix, snapmix, SnapMixLoss
