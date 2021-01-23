@@ -46,6 +46,29 @@ def cutmix(data, target, alpha):
     return new_data, targets
 
 
+def resizemix(data, target, alpha):
+    indices = torch.randperm(data.size(0))
+    shuffled_data = data[indices]
+    shuffled_target = target[indices]
+
+    lam = np.random.beta(alpha, alpha)
+    lam = np.clip(lam, 0.3, 0.4)
+    bbx1, bby1, bbx2, bby2 = rand_bbox(data.size(), lam)
+    new_data = data.clone()
+
+    resize_data = F.interpolate(
+        data[indices], (bby2 - bby1, bbx2 - bbx1), mode="nearest"
+    )
+
+    new_data[:, :, bby1:bby2, bbx1:bbx2] = resize_data
+    # adjust lambda to exactly match pixel ratio
+    lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (data.size()[-1] * data.size()[-2]))
+
+    targets = (target, shuffled_target, lam)
+
+    return new_data, targets
+
+
 def fmix(data, target, alpha, decay_power, shape, max_soft=0.0, reformulate=False):
     """https://github.com/ecs-vlc/fmix"""
     lam, mask = sample_mask(alpha, decay_power, shape, max_soft, reformulate)
