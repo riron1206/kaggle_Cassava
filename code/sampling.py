@@ -4,12 +4,20 @@ import matplotlib.pyplot as plt
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 
+name_mapping = {
+    0: "Cassava Bacterial Blight (CBB)",
+    1: "Cassava Brown Streak Disease (CBSD)",
+    2: "Cassava Green Mottle (CGM)",
+    3: "Cassava Mosaic Disease (CMD)",
+    4: "Healthy",
+}
 
-def minor_class_over_sample(train, n_over=2, is_plot=True):
+
+def minor_class_over_sample(train, n_over=2, over_classes=[0, 1, 2, 4], is_plot=True):
     """サンプル数少ないクラスだけ(3以外)サンプル数倍々にする
     https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/203594"""
     for n in range(n_over):
-        for i_cla in [0, 1, 2, 4]:
+        for i_cla in over_classes:
             train = pd.concat([train, train[train["label"] == i_cla]])
 
     if is_plot:
