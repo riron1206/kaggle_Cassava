@@ -125,6 +125,37 @@ https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/198143
 ディープラーニング+植物病害分類研究論文
 https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/199692
 
+
+--------------------------------------------------------------
+
+ディスカッションからのネタメモ 20210126
+
+①LBよりCV上げるべき？
+private LB見えたバグによると600位が170位ぐらいshake upしてたらしい…
+> In my experience, This kind of competition often end with pretty big shake up. 
+> And at the time when the bug of private LB exposed to the public, I only have one submission, scored 0.892 in PB, rank around 600+, but scored 0.897 in private LB and rank 170+.
+> So It is better to trust your CV.
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/213827
+
+?埋め込みベクトルをSVMで予測
+ケロッピ先生が試して良かったみたい。SVMの正則化パラメータC=0.001-0.0001が良いみたい
+> my svm experiment:
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202017
+誤分類の許容多めにしたらノイズに引っ張られるの軽減できる？
+（似たようなマージンを調整するバイテンパーlossが効いてるのかよくわからないのでほんとに効果あるのか分からないが…）
+
+?ノイズラベル除去
+> Even if the public/private test set is more or less noisy, we should do our best to remove excessive noisy images. 
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202017
+多少のノイズラベルは残すようにして過度にノイズのラベル（大きく予測間違っている確信度0.99以上のサンプルとか？）だけを除いて学習すればノイジーラベルあるtest setでも有効？
+
+④過去コンペのデータ入れて学習
+ケロッピ先生曰く
+>I think the LB is not only noisy but also contains some data not from the 2020 train set. 
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202017
+
+
+
 --------------------------------------------------------------
 
 画像の過去コンペと同じようにtrainとtestでラベルの分布違うのかなあ
