@@ -22,6 +22,12 @@ https://www.kaggle.com/szuzhangzhi/vision-transformer-vit-cuda-as-usual
 3.センタークロップを使用
 非常に異なるCVスコアが得られることに気づきました。したがって、これらのモデルをアンサンブルすると役立つ可能性があります。https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/205491
 
+
+■ラベルについて
+https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/211853
+トレーニングセットは1人の専門家によってラベル付けされ、テストセットは3人の専門家のコンセンサスによってラベル付けされました。ただし、プライベートLBリークから、プライベートテストセットの分布はパブリックテストセットと同様
+
+
 --------------------------------------------------------------
 ■ディスカッションメモ
 
