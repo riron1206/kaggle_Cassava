@@ -31,6 +31,9 @@ https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/211853
 --------------------------------------------------------------
 ■ディスカッションメモ
 
+PANDAコンペ1位はラベルノイズのサンプルを除去して学習した
+ground truth と predの差が大きいトレーニングデータを削除
+https://www.kaggle.com/c/prostate-cancer-grade-assessment/discussion/169143
 
 cvとLBはほぼ一致
 https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/198219
