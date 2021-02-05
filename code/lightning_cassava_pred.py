@@ -324,6 +324,10 @@ def run_tta(
     )
     cv = StratifiedKFold(n_splits=CFG.n_splits, shuffle=True, random_state=CFG.seeds[0])
     for j, (train_idx, valid_idx) in enumerate(cv.split(df, df["label"])):
+
+        if len(CFG.model_paths) <= j:
+            break
+
         valid_df = df.iloc[valid_idx]
         valid_loader = get_dataloader(img_size, valid_df, batch_size, CFG=CFG)
 
