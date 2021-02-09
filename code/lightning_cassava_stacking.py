@@ -39,7 +39,6 @@ from pytorch_stacking import (
     GCNStacking,
     set_random_seed,
 )
-from lightning_cassava import inference_one_epoch
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -226,6 +225,19 @@ class LitStackingModel(pl.LightningModule):
         acc = accuracy(y_hat, y)
         self.log("val_acc", acc, prog_bar=True, logger=True),
         self.log("val_loss", loss, prog_bar=True, logger=True)
+
+
+def inference_one_epoch(model, data_loader, device):
+    model.eval()
+    preds_all = []
+    with torch.no_grad():  # 勾配計算を無効にしてメモリ効率化
+        for step, batch in enumerate(data_loader):
+            x = batch["x"].to(device).float()
+            model = model.to(device)
+            preds = model(x)
+            preds_all += [torch.softmax(preds, 1).detach().cpu().numpy()]
+    preds_all = np.concatenate(preds_all, axis=0)
+    return preds_all
 
 
 def check_oof(y):
