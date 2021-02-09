@@ -119,7 +119,7 @@ class StackingDataModule(pl.LightningDataModule):
             shuffle=self.CFG.shuffle,
             num_workers=self.CFG.num_workers,
         )
-        print(f"train_loader: {len(train_loader)}")
+        # print(f"train_loader: {len(train_loader)}")
         return train_loader
 
     def val_dataloader(self):
@@ -129,7 +129,7 @@ class StackingDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.CFG.num_workers,
         )
-        print(f"val_loader: {len(val_loader)}")
+        # print(f"val_loader: {len(val_loader)}")
         return val_loader
 
 
@@ -185,9 +185,10 @@ class LitStackingModel(pl.LightningModule):
         if self.CFG.gauss_scale > 0.0:
             # 過学習防ぐためにガウシアンノイズ加算
             # https://www.kaggle.com/c/stanford-covid-vaccine/discussion/189709
-            x = x + np.random.normal(
-                0.0, scale=self.CFG.gauss_scale
-            )  # 平均=0, 標準偏差はパラメータで変更
+            # 平均=0, 標準偏差はパラメータで変更
+            g_noise = np.random.normal(0.0, scale=self.CFG.gauss_scale, size=x.shape)
+            x = x + g_noise
+            # x = torch.softmax(x, -1)  # 確率値に戻す 0.2-1.9 にしかならなくなるからやめる
 
         if self.CFG.cutmix_p > 0.0:
             # cutmix for table
@@ -287,14 +288,20 @@ def train_stacking(x, y, StackingCFG, is_check_model=False):
             trainer_params[
                 "accumulate_grad_batches"
             ] = StackingCFG.accumulate_grad_batches  # 勾配をnバッチ分溜めてから誤差逆伝播
-            early_stopping = EarlyStopping("val_loss", patience=StackingCFG.patience)
+
             if StackingCFG.monitor == "val_loss":
                 model_checkpoint = ModelCheckpoint(
                     monitor="val_loss", save_top_k=1, mode="min"
                 )
+                early_stopping = EarlyStopping(
+                    monitor="val_loss", patience=StackingCFG.patience, mode="min"
+                )
             else:
                 model_checkpoint = ModelCheckpoint(
                     monitor="val_acc", save_top_k=1, mode="max"
+                )
+                early_stopping = EarlyStopping(
+                    monitor="val_acc", patience=StackingCFG.patience, mode="max"
                 )
             trainer_params["callbacks"] = [model_checkpoint, early_stopping]
 
@@ -389,13 +396,13 @@ class StackingConfig:
         self.lr_scheduler = "CosineAnnealingWarmRestarts"
         self.T_max = self.max_epochs
         self.T_0 = self.max_epochs
-        self.lr = 1e-3
-        self.min_lr = 1e-5
+        self.lr = 0.1
+        self.min_lr = 1e-3
         self.weight_decay = 1e-5
         self.smoothing = 0.2
         self.train_loss_name = "BiTemperedLoss"
-        self.t1 = 0.8
-        self.t2 = 1.4
+        self.t1 = 1.0
+        self.t2 = 1.0
         self.monitor = "val_acc"
         self.out_dir = "."
         self.arch = ""
