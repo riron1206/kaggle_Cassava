@@ -1,14 +1,13 @@
 import os
 import sys
 import yaml
+import shutil
+import pickle
 import numpy as np
 import pandas as pd
-
-import pickle
+from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import accuracy_score, log_loss
 from colorama import Fore
-
-y_ = Fore.YELLOW
 
 import torch
 import torch.nn as nn
@@ -40,6 +39,9 @@ from pytorch_stacking import (
     GCNStacking,
     set_random_seed,
 )
+from lightning_cassava import inference_one_epoch
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class StackingDatasetMLP(Dataset):
@@ -224,3 +226,172 @@ class LitStackingModel(pl.LightningModule):
         acc = accuracy(y_hat, y)
         self.log("val_acc", acc, prog_bar=True, logger=True),
         self.log("val_loss", loss, prog_bar=True, logger=True)
+
+
+def check_oof(y):
+    y_ = Fore.YELLOW
+    Y_oof = pickle.load(open(f"Y_pred.pkl", "rb"))
+    oof = accuracy_score(y, Y_oof.values.argmax(1))
+    oof_loss = log_loss(y, Y_oof.values)
+    print(y_, f"oof:", round(oof, 4))
+    print(y_, f"oof_loss:", round(oof_loss, 4))
+    return oof, oof_loss
+
+
+def train_stacking(x, y, StackingCFG, is_check_model=False):
+    print(f"x.shape: {x.shape}")
+    print(f"y.shape: {y.shape}")
+
+    Y_pred = pd.DataFrame(
+        np.zeros((len(y), StackingCFG.n_classes)),
+        # columns=name_mapping.values(),
+        # index=df.index,
+    )
+    for i in StackingCFG.seeds:
+        print(f"---------------------------- seed: {i} ----------------------------")
+        set_random_seed(seed=i)
+        pl.seed_everything(i)
+
+        cv = StratifiedKFold(
+            n_splits=StackingCFG.n_splits, shuffle=StackingCFG.shuffle, random_state=i
+        )
+
+        for j, (train_idx, valid_idx) in enumerate(cv.split(y, y)):
+            print(f"train_idx, valid_idx: {len(train_idx)}, {len(valid_idx)}")
+
+            x_train, x_valid = (
+                x[train_idx],
+                x[valid_idx],
+            )
+            y_train, y_valid = y[train_idx], y[valid_idx]
+            dm = StackingDataModule(
+                x_train, x_valid, y_train, y_valid, StackingCFG, tmp_seed=i
+            )
+
+            trainer_params = {
+                "max_epochs": StackingCFG.max_epochs,
+                "deterministic": True,  # cudaの乱数固定
+            }
+            trainer_params[
+                "accumulate_grad_batches"
+            ] = StackingCFG.accumulate_grad_batches  # 勾配をnバッチ分溜めてから誤差逆伝播
+            early_stopping = EarlyStopping("val_loss", patience=StackingCFG.patience)
+            if StackingCFG.monitor == "val_loss":
+                model_checkpoint = ModelCheckpoint(
+                    monitor="val_loss", save_top_k=1, mode="min"
+                )
+            else:
+                model_checkpoint = ModelCheckpoint(
+                    monitor="val_acc", save_top_k=1, mode="max"
+                )
+            trainer_params["callbacks"] = [model_checkpoint, early_stopping]
+
+            trainer = pl.Trainer(**trainer_params)
+            pl_model = LitStackingModel(StackingCFG)
+            if is_check_model:
+                print(pl_model)
+            trainer.fit(pl_model, dm)
+
+            shutil.copy(
+                trainer.checkpoint_callback.best_model_path,
+                f"{StackingCFG.out_dir}/model_seed_{i}_fold_{j}.ckpt",
+            )
+
+            # ---------- val predict ---------
+            pl_model = pl_model.load_from_checkpoint(
+                trainer.checkpoint_callback.best_model_path, CFG=StackingCFG
+            )
+            Y_pred.iloc[valid_idx] += inference_one_epoch(
+                pl_model, dm.val_dataloader(), device
+            ) / (len(StackingCFG.seeds) * StackingCFG.n_splits)
+            val_loss = log_loss(y_valid, Y_pred.iloc[valid_idx])
+            val_acc = (
+                y_valid == np.argmax(Y_pred.iloc[valid_idx].values, axis=1)
+            ).mean()
+            print(f"fold {j} validation loss = {val_loss}")
+            print(f"fold {j} validation accuracy = {val_acc}\n")
+
+            del pl_model
+            torch.cuda.empty_cache()  # 空いているキャッシュメモリを解放してGPUメモリの断片化を減らす
+
+    pickle.dump(Y_pred, open("Y_pred.pkl", "wb"))
+    oof, oof_loss = check_oof(y)
+
+    return oof, oof_loss
+
+
+def pred_stacking(x, StackingCFG, y=None):
+    """stackingモデルで予測"""
+    if StackingCFG.arch == "mlp":
+        test_dataset = StackingDatasetMLP(x, y)
+    else:
+        test_dataset = StackingDatasetCNN(x, y)
+
+    test_preds = np.zeros((len(x), StackingCFG.n_classes))
+
+    for i in StackingCFG.seeds:
+        print(f"seed: {i}")
+        set_random_seed(seed=i)
+        pl.seed_everything(i)
+
+        if StackingCFG.arch != "mlp":
+            test_dataset.reset_model_order()
+            test_dataset.shuffle_model_order(i)
+
+        for j in range(StackingCFG.n_splits):
+            test_loader = DataLoader(
+                test_dataset,
+                batch_size=StackingCFG.batch_size,
+                shuffle=False,
+                num_workers=StackingCFG.num_workers,
+            )
+
+            ckpt = f"{StackingCFG.out_dir}/model_seed_{i}_fold_{j}.ckpt"
+            pl_model = LitStackingModel(StackingCFG).load_from_checkpoint(
+                ckpt, CFG=StackingCFG
+            )
+            print(f"load ckpt: {ckpt}")
+
+            test_preds += inference_one_epoch(
+                pl_model, test_loader, StackingCFG.device
+            ) / (len(StackingCFG.seeds) * StackingCFG.n_splits)
+
+    print(test_preds.argmax(axis=1))
+    if y is not None:
+        print("oof mean:", accuracy_score(y, test_preds.argmax(1)))
+
+    return test_preds
+
+
+class StackingConfig:
+    def __init__(self):
+        self.seeds = [0]
+        self.n_classes = 5
+        self.max_epochs = 10
+        self.patience = self.max_epochs - 1
+        self.n_splits = 5
+        self.shuffle = True
+        self.batch_size = 256
+        self.accumulate_grad_batches = 1
+        self.opt = "adam"
+        self.lr_scheduler = "CosineAnnealingWarmRestarts"
+        self.T_max = self.max_epochs
+        self.T_0 = self.max_epochs
+        self.lr = 1e-3
+        self.min_lr = 1e-5
+        self.weight_decay = 1e-5
+        self.smoothing = 0.2
+        self.train_loss_name = "BiTemperedLoss"
+        self.t1 = 0.8
+        self.t2 = 1.4
+        self.monitor = "val_acc"
+        self.out_dir = "."
+        self.arch = ""
+        self.mlp_params = None
+        self.cnn1d_params = None
+        self.cnn2d_params = None
+        self.gauss_scale = 0.0
+        self.cutmix_p = 0.0
+        self.alpha = 1.0
+        self.device = device
+        self.num_workers = 0

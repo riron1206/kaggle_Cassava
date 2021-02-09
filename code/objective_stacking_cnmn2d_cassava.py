@@ -5,9 +5,6 @@
 
 import os
 import argparse
-import pickle
-import json
-import yaml
 import shutil
 import warnings
 import optuna
@@ -15,17 +12,11 @@ import torch
 import pytorch_lightning as pl
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import accuracy_score, log_loss
-from colorama import Fore
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-from pytorch_lightning.callbacks import ModelCheckpoint
 
-from pytorch_stacking import set_random_seed
-from lightning_cassava import inference_one_epoch
 from lightning_cassava_stacking import (
-    StackingDataModule,
-    LitStackingModel,
+    train_stacking,
+    pred_stacking,
+    StackingConfig,
 )
 
 import params.objective_stacking_cnmn2d_cassava_params as params_py
@@ -34,7 +25,7 @@ warnings.filterwarnings("ignore")
 
 max_epochs = 10
 n_trials = 100
-# n_trials = 2
+# n_trials = 2  # DEBUG
 n_classes = 5
 num_workers = 0
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -50,134 +41,8 @@ cnn_pred = np.stack(preds).transpose(1, 2, 0)
 cnn_pred = cnn_pred.reshape(len(cnn_pred), 1, n_classes, n_models)
 
 
-class Config:
-    def __init__(self):
-        self.seeds = [0]
-        self.n_classes = n_classes
-        self.max_epochs = max_epochs
-        self.patience = max_epochs - 1
-        self.n_splits = 5
-        self.shuffle = True
-        self.batch_size = 256
-        self.accumulate_grad_batches = 1
-        self.opt = "adam"
-        self.lr_scheduler = "CosineAnnealingWarmRestarts"
-        self.T_max = max_epochs
-        self.T_0 = max_epochs
-        self.lr = 1e-3
-        self.min_lr = 1e-5
-        self.weight_decay = 1e-5
-        self.smoothing = 0.2
-        self.train_loss_name = "BiTemperedLoss"
-        self.t1 = 0.8
-        self.t2 = 1.4
-        self.monitor = "val_acc"
-        self.out_dir = "."
-        self.arch = ""
-        self.mlp_params = None
-        self.cnn1d_params = None
-        self.cnn2d_params = None
-        self.gauss_scale = 0.0
-        self.cutmix_p = 0.0
-        self.alpha = 1.0
-        self.device = device
-        self.num_workers = num_workers
-
-
-def check_oof(y):
-    y_ = Fore.YELLOW
-    Y_oof = pickle.load(open(f"Y_pred.pkl", "rb"))
-    oof = accuracy_score(y, Y_oof.values.argmax(1))
-    oof_loss = log_loss(y, Y_oof.values)
-    print(y_, f"oof:", round(oof, 4))
-    print(y_, f"oof_loss:", round(oof_loss, 4))
-    return oof, oof_loss
-
-
-def train_stacking(x, y, StackingCFG, is_check_model=False):
-    print(f"x.shape: {x.shape}")
-    print(f"y.shape: {y.shape}")
-
-    Y_pred = pd.DataFrame(
-        np.zeros((df.shape[0], StackingCFG.n_classes)),
-        # columns=name_mapping.values(),
-        # index=df.index,
-    )
-    for i in StackingCFG.seeds:
-        print(f"---------------------------- seed: {i} ----------------------------")
-        set_random_seed(seed=i)
-        pl.seed_everything(i)
-
-        cv = StratifiedKFold(
-            n_splits=StackingCFG.n_splits, shuffle=StackingCFG.shuffle, random_state=i
-        )
-
-        for j, (train_idx, valid_idx) in enumerate(cv.split(y, y)):
-            print(f"train_idx, valid_idx: {len(train_idx)}, {len(valid_idx)}")
-
-            x_train, x_valid = (
-                x[train_idx],
-                x[valid_idx],
-            )
-            y_train, y_valid = y[train_idx], y[valid_idx]
-            dm = StackingDataModule(
-                x_train, x_valid, y_train, y_valid, StackingCFG, tmp_seed=i
-            )
-
-            trainer_params = {
-                "max_epochs": StackingCFG.max_epochs,
-                "deterministic": True,  # cudaの乱数固定
-            }
-            trainer_params[
-                "accumulate_grad_batches"
-            ] = StackingCFG.accumulate_grad_batches  # 勾配をnバッチ分溜めてから誤差逆伝播
-            early_stopping = EarlyStopping("val_loss", patience=StackingCFG.patience)
-            if StackingCFG.monitor == "val_loss":
-                model_checkpoint = ModelCheckpoint(
-                    monitor="val_loss", save_top_k=1, mode="min"
-                )
-            else:
-                model_checkpoint = ModelCheckpoint(
-                    monitor="val_acc", save_top_k=1, mode="max"
-                )
-            trainer_params["callbacks"] = [model_checkpoint, early_stopping]
-
-            trainer = pl.Trainer(**trainer_params)
-            pl_model = LitStackingModel(StackingCFG)
-            if is_check_model:
-                print(pl_model)
-            trainer.fit(pl_model, dm)
-
-            shutil.copy(
-                trainer.checkpoint_callback.best_model_path,
-                f"{StackingCFG.out_dir}/model_seed_{i}_fold_{j}.ckpt",
-            )
-
-            # ---------- val predict ---------
-            pl_model = pl_model.load_from_checkpoint(
-                trainer.checkpoint_callback.best_model_path, CFG=StackingCFG
-            )
-            Y_pred.iloc[valid_idx] += inference_one_epoch(
-                pl_model, dm.val_dataloader(), device
-            ) / (len(StackingCFG.seeds) * StackingCFG.n_splits)
-            val_loss = log_loss(y_valid, Y_pred.iloc[valid_idx])
-            val_acc = (
-                y_valid == np.argmax(Y_pred.iloc[valid_idx].values, axis=1)
-            ).mean()
-            print(f"fold {j} validation loss = {val_loss}")
-            print(f"fold {j} validation accuracy = {val_acc}\n")
-
-            del pl_model
-            torch.cuda.empty_cache()  # 空いているキャッシュメモリを解放してGPUメモリの断片化を減らす
-
-    pickle.dump(Y_pred, open("Y_pred.pkl", "wb"))
-    oof, oof_loss = check_oof(df["label"].values)
-
-    return oof, oof_loss
-
-
 def objective(trial):
-    CFG = Config()
+    CFG = StackingConfig()
     CFG.arch = arch
 
     kwargs_head = dict(
