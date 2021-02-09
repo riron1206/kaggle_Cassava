@@ -386,8 +386,8 @@ class StackingConfig:
     def __init__(self):
         self.seeds = [0]
         self.n_classes = 5
-        self.max_epochs = 10
-        self.patience = self.max_epochs - 1
+        self.max_epochs = 200
+        self.patience = 50
         self.n_splits = 5
         self.shuffle = True
         self.batch_size = 256
@@ -409,7 +409,7 @@ class StackingConfig:
         self.mlp_params = None
         self.cnn1d_params = None
         self.cnn2d_params = None
-        self.gauss_scale = 0.0
+        self.gauss_scale = 0.1
         self.cutmix_p = 0.0
         self.alpha = 1.0
         self.device = device
