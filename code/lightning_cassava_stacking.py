@@ -251,7 +251,9 @@ def check_oof(y):
     return oof, oof_loss
 
 
-def train_stacking(x, y, StackingCFG, is_check_model=False):
+def train_stacking(
+    x, y, StackingCFG, is_check_model=False, add_train_x=None, add_train_y=None
+):
     print(f"x.shape: {x.shape}")
     print(f"y.shape: {y.shape}")
 
@@ -277,6 +279,12 @@ def train_stacking(x, y, StackingCFG, is_check_model=False):
                 x[valid_idx],
             )
             y_train, y_valid = y[train_idx], y[valid_idx]
+
+            if add_train_x is not None:
+                # trainに追加。pseudo label用
+                x_train = np.vstack((x_train, add_train_x))
+                y_train = np.concatenate([y_train, add_train_y])
+
             dm = StackingDataModule(
                 x_train, x_valid, y_train, y_valid, StackingCFG, tmp_seed=i
             )
