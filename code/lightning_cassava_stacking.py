@@ -29,6 +29,7 @@ if os.getcwd() in ["/kaggle/working", "/content"]:
 else:
     sys.path.append(r"C:\Users\81908\MyGitHub\kaggle_Cassava\code")
 
+# from mix_aug import cutmix
 from mix_aug_table import cutmix_for_tabular, cutmix, mixup
 from smooth_ce_loss import SmoothCrossEntropyLoss
 from bi_tempered_loss import BiTemperedLoss
@@ -204,14 +205,18 @@ class LitStackingModel(pl.LightningModule):
                     p=self.CFG.cutmix_p,
                     random_state=None,
                 )
+                # x, y_onehot = mixup(x, y_onehot, alpha=self.CFG.alpha, p=self.CFG.cutmix_p, random_state=None,)
             else:
-                x, y_onehot = cutmix(
-                    x,
-                    y_onehot,
-                    alpha=self.CFG.alpha,
-                    p=self.CFG.cutmix_p,
-                    random_state=None,
-                )
+                try:
+                    x, y_onehot = cutmix(
+                        x,
+                        y_onehot,
+                        alpha=self.CFG.alpha,
+                        p=self.CFG.cutmix_p,
+                        random_state=None,
+                    )  # mix_aug_table.py はなぜか学習途中でエラーになることがある np.random.randint(h - r_h) が原因ぽいが...
+                except:
+                    print("Error cutmix....")
                 # print("x cutmix", x)
                 # print("y cutmix", y_onehot)
             y_onehot = y_onehot.to(self.CFG.device)

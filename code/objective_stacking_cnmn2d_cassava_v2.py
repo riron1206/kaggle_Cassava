@@ -147,7 +147,8 @@ def objective(trial):
         old_pred_cnn2d = pred_stacking(old_x, CFG)
         old_acc = accuracy_score(old_df["label"].values, old_pred_cnn2d.argmax(1))
         oof = (oof + old_acc) / 2.0
-        trial.set_user_attr("2019_acc", old_acc)
+        trial.set_user_attr("2019_acc:", old_acc)
+        trial.set_user_attr("(2020+2019_acc) / 2:", oof)
         print(f"old_acc:", old_acc)
         print(f"(oof + old_acc) / 2.0:", oof)
 
