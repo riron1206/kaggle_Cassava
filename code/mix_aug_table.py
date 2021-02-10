@@ -45,16 +45,22 @@ def cutmix(x, y=None, alpha=1.0, p=1.0, random_state=None):
 
 
 def cutmix_for_tabular(x, y=None, alpha=1.0, p=1.0, random_state=None):
+    print(x.shape)
     n, d = x.shape
+
+    # yはonehotじゃないとだめ
+    if y.ndim == 1:
+        y = np.array([np.identity(y.max() + 1)[_y] for _y in y])
 
     if n is not None and rn.random() < p:
         random_state = check_random_state(random_state)
         l = random_state.beta(alpha, alpha)
         mask = random_state.choice([False, True], size=d, p=[l, 1.0 - l])
-        mask = np.where(mask)[0]
-        shuffle = random_state.choice(n, n, replace=False)
-
-        x[:, mask] = x[shuffle, mask]
+        mask = np.where(mask)[0]  # シャッフルした行の値に変更する列のid
+        shuffle = random_state.choice(n, n, replace=False)  # 行の順番シャッフル
+        # print(mask)
+        # musk列をシャッフルした値に置き換え
+        x[:, mask] = x[shuffle][:, mask]
 
         if y is not None:
             y = l * y + (1.0 - l) * y[shuffle]

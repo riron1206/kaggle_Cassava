@@ -29,7 +29,7 @@ if os.getcwd() in ["/kaggle/working", "/content"]:
 else:
     sys.path.append(r"C:\Users\81908\MyGitHub\kaggle_Cassava\code")
 
-from mix_aug_table import cutmix_for_tabular
+from mix_aug_table import cutmix_for_tabular, cutmix, mixup
 from smooth_ce_loss import SmoothCrossEntropyLoss
 from bi_tempered_loss import BiTemperedLoss
 from pytorch_stacking import (
@@ -186,15 +186,35 @@ class LitStackingModel(pl.LightningModule):
             # 過学習防ぐためにガウシアンノイズ加算
             # https://www.kaggle.com/c/stanford-covid-vaccine/discussion/189709
             # 平均=0, 標準偏差はパラメータで変更
-            g_noise = np.random.normal(0.0, scale=self.CFG.gauss_scale, size=x.shape)
-            x = x + g_noise
+            # g_noise = np.random.normal(0.0, scale=self.CFG.gauss_scale, size=x.shape)  # gpuだとエラー
+            g_noise = torch.normal(mean=0.0, std=self.CFG.gauss_scale, size=x.shape)
+            x = x + g_noise.to(self.CFG.device)
             # x = torch.softmax(x, -1)  # 確率値に戻す 0.2-1.9 にしかならなくなるからやめる
 
+        # print("\ny before", y)
         if self.CFG.cutmix_p > 0.0:
-            # cutmix for table
-            x, y = cutmix_for_tabular(
-                x, y, alpha=self.CFG.alpha, p=self.CFG.cutmix_p, random_state=None
-            )
+            # onehot
+            y_onehot = torch.eye(self.CFG.n_classes)[y]
+            if x.ndim == 2:
+                # cutmix for table
+                x, y_onehot = cutmix_for_tabular(
+                    x,
+                    y_onehot,
+                    alpha=self.CFG.alpha,
+                    p=self.CFG.cutmix_p,
+                    random_state=None,
+                )
+            else:
+                x, y_onehot = cutmix(
+                    x,
+                    y_onehot,
+                    alpha=self.CFG.alpha,
+                    p=self.CFG.cutmix_p,
+                    random_state=None,
+                )
+                # print("x cutmix", x)
+                # print("y cutmix", y_onehot)
+            y_onehot = y_onehot.to(self.CFG.device)
 
         if self.CFG.train_loss_name == "SmoothCrossEntropyLoss":
             loss_fn = SmoothCrossEntropyLoss(smoothing=self.CFG.smoothing).to(
@@ -208,9 +228,14 @@ class LitStackingModel(pl.LightningModule):
         #    loss_fn = nn.CrossEntropyLoss().to(self.CFG.device)
 
         y_hat = self(x.float())
-        loss = loss_fn(y_hat, y)
 
         acc = accuracy(y_hat, y)
+
+        if self.CFG.cutmix_p > 0.0:
+            loss = loss_fn(y_hat, y_onehot)
+        else:
+            loss = loss_fn(y_hat, y)
+
         self.log(
             "train_acc", acc, on_step=False, on_epoch=True, prog_bar=True, logger=True
         )
@@ -312,6 +337,8 @@ def train_stacking(
                     monitor="val_acc", patience=StackingCFG.patience, mode="max"
                 )
             trainer_params["callbacks"] = [model_checkpoint, early_stopping]
+            if StackingCFG.device == "cuda":
+                trainer_params["gpus"] = 1
 
             trainer = pl.Trainer(**trainer_params)
             pl_model = LitStackingModel(StackingCFG)

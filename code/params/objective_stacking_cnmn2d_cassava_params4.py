@@ -107,9 +107,9 @@ old_preds.append(pred)
 """
 2019年のpklで疑似ラベル
 """
-is_pseudo_2019 = False
+is_pseudo_2019 = True
 
 """
 2019年のpklも最適化のデータに使う
 """
-is_objective_2019 = True
+is_objective_2019 = False
