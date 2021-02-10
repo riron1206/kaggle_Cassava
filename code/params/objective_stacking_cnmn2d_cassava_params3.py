@@ -93,17 +93,6 @@ for p in pkl_paths:
 pred = np.array(pkls).mean(0)
 old_preds.append(pred)
 
-# # ---- SiNpcw ----
-# m_dir = r"C:\Users\81908\jupyter_notebook\pytorch_lightning_work\kaggle_Cassava\kaggle_datasets_dl\cassavapkl"
-#
-# pkl = f"{m_dir}/22019613_efficientnet-b4.pkl"
-# pred = pickle.load(open(pkl, "rb"))
-# preds.append(pred.values)
-#
-# pkl = f"{m_dir}/22019632_timm-resnest101e.pkl"
-# pred = pickle.load(open(pkl, "rb"))
-# preds.append(pred.values)
-
 """
 2019年のpklで疑似ラベル
 """

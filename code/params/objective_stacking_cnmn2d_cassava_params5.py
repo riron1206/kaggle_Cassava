@@ -59,57 +59,16 @@ pkl = f"{m_dir}/vit_b16_224_fold10_tta.pkl"
 pred = pickle.load(open(pkl, "rb"))
 preds.append(pred.values)
 
+# # ---- SiNpcw ----
 """
 ttaの結果のpkl
-過去コンペのみ
 """
-old_preds = []
+m_dir = r"C:\Users\81908\jupyter_notebook\pytorch_lightning_work\kaggle_Cassava\kaggle_datasets_dl\cassavapkl"
 
-m_dir = r"C:\Users\81908\jupyter_notebook\pytorch_lightning_work\kaggle_Cassava\notebook\check_old_comp_pred\20210210"
+pkl = f"{m_dir}/22019613_tta3_efficientnet-b4.pkl"
+pred = pickle.load(open(pkl, "rb"))
+preds.append(pred.values)
 
-pkl_paths = glob.glob(f"{m_dir}/tf_efficientnet_b4_ns_fold_*_tta.pkl")
-pkls = []
-for p in pkl_paths:
-    pkl = pickle.load(open(p, "rb"))
-    pkls += [pkl.values]
-pred = np.array(pkls).mean(0)
-old_preds.append(pred)
-
-pkl_paths = glob.glob(
-    f"{m_dir}/byol_seresnext50_32x4d_cutmix_labelsmooth_half_fold_*_tta.pkl"
-)
-pkls = []
-for p in pkl_paths:
-    pkl = pickle.load(open(p, "rb"))
-    pkls += [pkl.values]
-pred = np.array(pkls).mean(0)
-old_preds.append(pred)
-
-pkl_paths = glob.glob(f"{m_dir}/vit_b16_224_fold10_fold_*_tta.pkl")
-pkls = []
-for p in pkl_paths:
-    pkl = pickle.load(open(p, "rb"))
-    pkls += [pkl.values]
-pred = np.array(pkls).mean(0)
-old_preds.append(pred)
-
-# # ---- SiNpcw ----
-# m_dir = r"C:\Users\81908\jupyter_notebook\pytorch_lightning_work\kaggle_Cassava\kaggle_datasets_dl\cassavapkl"
-#
-# pkl = f"{m_dir}/22019613_efficientnet-b4.pkl"
-# pred = pickle.load(open(pkl, "rb"))
-# preds.append(pred.values)
-#
-# pkl = f"{m_dir}/22019632_timm-resnest101e.pkl"
-# pred = pickle.load(open(pkl, "rb"))
-# preds.append(pred.values)
-
-"""
-2019年のpklで疑似ラベル
-"""
-is_pseudo_2019 = True
-
-"""
-2019年のpklも最適化のデータに使う
-"""
-is_objective_2019 = False
+pkl = f"{m_dir}/22019632_tta3_timm-resnest101e.pkl"
+pred = pickle.load(open(pkl, "rb"))
+preds.append(pred.values)
