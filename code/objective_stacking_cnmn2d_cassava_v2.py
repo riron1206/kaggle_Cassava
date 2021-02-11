@@ -70,6 +70,24 @@ elif args.params_py == "objective_stacking_cnmn2d_cassava_params5":
 
     print(f"------- import objective_stacking_cnmn2d_cassava_params5.py -------")
 
+elif args.params_py == "objective_stacking_cnmn2d_cassava_params5_1":
+    import params.objective_stacking_cnmn2d_cassava_params5_1 as params_py
+
+    print(f"------- import objective_stacking_cnmn2d_cassava_params5_1.py -------")
+    old_preds = params_py.old_preds
+    old_df = params_py.old_df
+    is_objective_2019 = params_py.is_objective_2019
+    is_pseudo_2019 = params_py.is_pseudo_2019
+
+elif args.params_py == "objective_stacking_cnmn2d_cassava_params5_2":
+    import params.objective_stacking_cnmn2d_cassava_params5_2 as params_py
+
+    print(f"------- import objective_stacking_cnmn2d_cassava_params5_2.py -------")
+    old_preds = params_py.old_preds
+    old_df = params_py.old_df
+    is_objective_2019 = params_py.is_objective_2019
+    is_pseudo_2019 = params_py.is_pseudo_2019
+
 
 max_epochs = 35
 n_trials = 300
