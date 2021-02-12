@@ -8,6 +8,7 @@ notebookだとログ大量に出るのでpyから実行
 #  python C:\Users\81908\MyGitHub\kaggle_Cassava\code\objective_stacking_cnmn2d_cassava_v2.py -p objective_stacking_cnmn2d_cassava_params2
 
 import os
+import pickle
 import argparse
 import shutil
 import warnings
@@ -31,6 +32,15 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "-p", "--params_py", type=str, default="objective_stacking_cnmn2d_cassava_params3"
 )
+parser.add_argument(
+    "-d",
+    "--debug",
+    action="store_const",
+    const=True,
+    default=False,
+    help="Debug flag.",
+)
+
 args = parser.parse_args()
 
 old_preds = None
@@ -88,10 +98,12 @@ elif args.params_py == "objective_stacking_cnmn2d_cassava_params5_2":
     is_objective_2019 = params_py.is_objective_2019
     is_pseudo_2019 = params_py.is_pseudo_2019
 
-
-max_epochs = 35
-n_trials = 300
-# n_trials = 2  # DEBUG
+if args.debug:
+    max_epochs = 2
+    n_trials = 2
+else:
+    max_epochs = 35
+    n_trials = 300
 n_classes = 5
 num_workers = 0
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -192,3 +204,8 @@ if __name__ == "__main__":
     # ログ大量に出るから消す
     if os.path.exists("lightning_logs/"):
         shutil.rmtree("lightning_logs/")
+
+    if args.debug:
+        # 一応pkl確認
+        print("check Y_pred.pkl")
+        print(pickle.load(open("Y_pred.pkl", "rb")))
