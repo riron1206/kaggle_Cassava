@@ -362,7 +362,7 @@ def train_stacking(
             )
             Y_pred.iloc[valid_idx] += inference_one_epoch(
                 pl_model, dm.val_dataloader(), device
-            ) / (len(StackingCFG.seeds) * StackingCFG.n_splits)
+            ) / len(StackingCFG.seeds)
             val_loss = log_loss(y_valid, Y_pred.iloc[valid_idx])
             val_acc = (
                 y_valid == np.argmax(Y_pred.iloc[valid_idx].values, axis=1)
