@@ -26,8 +26,6 @@
     - https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/202673
     - 専門家がラベル付けしたみたいだが、間違ったラベル多い模様
         - https://www.kaggle.com/c/cassava-leaf-disease-classification/overview
-    - train setは1人の専門家によってラベル付けされ、test setは3人の専門家のコンセンサスによってラベル付けたらしい。本当か？
-        - https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/211853
 - 2019年に同様のコンペ開催されており、2019年のデータ利用可能
     - https://www.kaggle.com/c/cassava-disease/data
     - 2019年のコンペの論文: https://arxiv.org/abs/1908.02900

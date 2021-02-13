@@ -134,6 +134,11 @@ elif args.params_py == "objective_stacking_cnmn2d_cassava_params6_7":
 
     print(f"------- import objective_stacking_cnmn2d_cassava_params6_7.py -------")
 
+elif args.params_py == "objective_stacking_cnmn2d_cassava_params6_8":
+    import params.objective_stacking_cnmn2d_cassava_params6_8 as params_py
+
+    print(f"------- import objective_stacking_cnmn2d_cassava_params6_8.py -------")
+
 
 if args.debug:
     max_epochs = 2
