@@ -5,6 +5,7 @@ notebookだとログ大量に出るのでpyから実行
 # Usage:
 #  conda activate lightning
 #  python C:\Users\81908\MyGitHub\kaggle_Cassava\code\objective_stacking_cnmn2d_cassava_v2.py
+#  python C:\Users\81908\MyGitHub\kaggle_Cassava\code\objective_stacking_cnmn2d_cassava_v2.py -d  # DEBUG
 #  python C:\Users\81908\MyGitHub\kaggle_Cassava\code\objective_stacking_cnmn2d_cassava_v2.py -p objective_stacking_cnmn2d_cassava_params2
 
 import os
@@ -97,6 +98,42 @@ elif args.params_py == "objective_stacking_cnmn2d_cassava_params5_2":
     old_df = params_py.old_df
     is_objective_2019 = params_py.is_objective_2019
     is_pseudo_2019 = params_py.is_pseudo_2019
+
+elif args.params_py == "objective_stacking_cnmn2d_cassava_params6_1":
+    import params.objective_stacking_cnmn2d_cassava_params6_1 as params_py
+
+    print(f"------- import objective_stacking_cnmn2d_cassava_params6_1.py -------")
+
+elif args.params_py == "objective_stacking_cnmn2d_cassava_params6_2":
+    import params.objective_stacking_cnmn2d_cassava_params6_2 as params_py
+
+    print(f"------- import objective_stacking_cnmn2d_cassava_params6_2.py -------")
+
+elif args.params_py == "objective_stacking_cnmn2d_cassava_params6_3":
+    import params.objective_stacking_cnmn2d_cassava_params6_3 as params_py
+
+    print(f"------- import objective_stacking_cnmn2d_cassava_params6_3.py -------")
+
+elif args.params_py == "objective_stacking_cnmn2d_cassava_params6_4":
+    import params.objective_stacking_cnmn2d_cassava_params6_4 as params_py
+
+    print(f"------- import objective_stacking_cnmn2d_cassava_params6_4.py -------")
+
+elif args.params_py == "objective_stacking_cnmn2d_cassava_params6_5":
+    import params.objective_stacking_cnmn2d_cassava_params6_5 as params_py
+
+    print(f"------- import objective_stacking_cnmn2d_cassava_params6_5.py -------")
+
+elif args.params_py == "objective_stacking_cnmn2d_cassava_params6_6":
+    import params.objective_stacking_cnmn2d_cassava_params6_6 as params_py
+
+    print(f"------- import objective_stacking_cnmn2d_cassava_params6_6.py -------")
+
+elif args.params_py == "objective_stacking_cnmn2d_cassava_params6_7":
+    import params.objective_stacking_cnmn2d_cassava_params6_7 as params_py
+
+    print(f"------- import objective_stacking_cnmn2d_cassava_params6_7.py -------")
+
 
 if args.debug:
     max_epochs = 2
