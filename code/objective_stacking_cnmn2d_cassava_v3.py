@@ -48,6 +48,7 @@ old_preds = None
 old_df = None
 is_objective_2019 = False
 is_pseudo_2019 = False
+is_all_add_gauss_scale = False
 if args.params_py == "objective_stacking_cnmn2d_cassava_params":
     import params.objective_stacking_cnmn2d_cassava_params as params_py
 
@@ -143,6 +144,7 @@ elif args.params_py == "objective_stacking_cnmn2d_cassava_params6_9":
     import params.objective_stacking_cnmn2d_cassava_params6_9 as params_py
 
     print(f"------- import objective_stacking_cnmn2d_cassava_params6_9.py -------")
+    is_all_add_gauss_scale = params_py.is_all_add_gauss_scale
 
 
 if args.debug:
@@ -208,14 +210,29 @@ def objective(trial):
     CFG.smoothing = trial.suggest_discrete_uniform("smoothing", 0.0, 0.3, 0.1)
     CFG.t1 = trial.suggest_discrete_uniform("t1", 0.7, 1.0, 0.1)
     CFG.t2 = trial.suggest_discrete_uniform("t2", 1.0, 1.3, 0.1)
-    CFG.gauss_scale = trial.suggest_discrete_uniform("gauss_scale", 0.05, 0.25, 0.01)
+
+    _cnn_pred = cnn_pred.copy()
+    gauss_scale = trial.suggest_discrete_uniform("gauss_scale", 0.05, 0.25, 0.01)
+    if is_all_add_gauss_scale:
+        # tarin val 両方にガウスノイズ加算
+        _cnn_pred += np.random.normal(0.0, scale=gauss_scale, size=_cnn_pred.shape)
+        CFG.gauss_scale = 0.0
+
+        if args.debug:
+            print("cnn_pred", cnn_pred)
+            print("_cnn_pred", _cnn_pred)
+
+    else:
+        CFG.gauss_scale = gauss_scale
+    trial.set_user_attr("is_all_add_gauss_scale:", is_all_add_gauss_scale)
+
     CFG.cutmix_p = trial.suggest_categorical("cutmix_p", [0.0, 1.0, 0.5, 0.2])
     CFG.alpha = trial.suggest_categorical("alpha", [1.0, 0.5, 0.2, 5.0])
 
     print("-" * 100)
     print(f"CFG: {CFG.__dict__}")
 
-    oof, oof_loss = train_stacking(cnn_pred, y, CFG)
+    oof, oof_loss = train_stacking(_cnn_pred, y, CFG)
 
     # 2019年のpklも最適化のデータに使う場合
     if is_objective_2019:

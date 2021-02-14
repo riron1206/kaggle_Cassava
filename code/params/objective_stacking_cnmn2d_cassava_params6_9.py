@@ -39,15 +39,14 @@ old_df = pd.read_csv(f"{MERGED_DIR}/merged.csv")
 old_df = old_df[old_df["source"] == 2019].reset_index(drop=True)
 old_df["file_path"] = f"{MERGED_DIR}/train/" + old_df["image_id"]
 
-# ['resnest101e_tta.pkl', 'tf_efficientnet_b4_ns_fold3_tta.pkl', 'vit_b16_224_fold10_tta.pkl', '22019720_tta3_efficientnet-b4.pkl', 'ex02C_efficientnet-b4.pkl']
-# avg oof tta=0.90606 [0.8941907744076273, 0.8924615600317801, 0.8860587932887788, 0.8969949058279199, 0.8997990372482124]
-# best acc: 0.9057811842781698
-# best_ens_weights:
-# , [[0.20922478, 0.19727891, 0.19879455, 0.19959025, 0.20360584]
-# , [0.20283412, 0.20147392, 0.20721189, 0.19943385, 0.19096467]
-# , [0.18588497, 0.19580499, 0.18819495, 0.20062245, 0.19935758]
-# , [0.1961656, 0.20340136, 0.2013925, 0.20034094, 0.20153352]
-# , [0.20589053, 0.20204082, 0.20440611, 0.20001251, 0.20453839]]
+# cfm_ens oof:    	0.9065
+# ['deit_base_patch16_224_tta.pkl', 'resnest101e_tta.pkl', 'tf_efficientnet_b4_ns_tta.pkl', '22019640_timm-resnest200e.pkl', '22019720_efficientnet-b4.pkl', 'ex02C_tta3_efficientnet-b4.pkl']
+# [[0.15281933, 0.16220547, 0.15501994, 0.16721397, 0.1671266]
+# , [0.17330265, 0.16399623, 0.16585746, 0.1663018, 0.16945498]
+# , [0.17146145, 0.16493874, 0.16941217, 0.16649726, 0.16117627]
+# , [0.16593786, 0.17229029, 0.17071268, 0.16660151, 0.16410831]
+# , [0.16409666, 0.16804901, 0.16837177, 0.16695335, 0.1680752]
+# , [0.17238205, 0.16852026, 0.17062598, 0.16643211, 0.17005864]]
 
 preds = []
 # ---- anonamename ----
@@ -56,15 +55,15 @@ ttaの結果のpkl
 """
 m_dir = r"C:\Users\81908\jupyter_notebook\pytorch_lightning_work\kaggle_Cassava\notebook\check_oof\cassava-emsemble-v2_tta_oof\kaggle_upload_oof_tta"
 
+pkl = f"{m_dir}/deit_base_patch16_224_tta.pkl"
+pred = pickle.load(open(pkl, "rb"))
+preds.append(pred.values)
+
 pkl = f"{m_dir}/resnest101e_tta.pkl"
 pred = pickle.load(open(pkl, "rb"))
 preds.append(pred.values)
 
-pkl = f"{m_dir}/tf_efficientnet_b4_ns_fold3_tta.pkl"
-pred = pickle.load(open(pkl, "rb"))
-preds.append(pred.values)
-
-pkl = f"{m_dir}/vit_b16_224_fold10_tta.pkl"
+pkl = f"{m_dir}/tf_efficientnet_b4_ns_tta.pkl"
 pred = pickle.load(open(pkl, "rb"))
 preds.append(pred.values)
 
@@ -74,10 +73,19 @@ ttaの結果のpkl
 """
 m_dir = r"C:\Users\81908\jupyter_notebook\pytorch_lightning_work\kaggle_Cassava\kaggle_datasets_dl\cassavapkl"
 
-pkl = f"{m_dir}/22019720_tta3_efficientnet-b4.pkl"
+pkl = f"{m_dir}/22019640_timm-resnest200e.pkl"
 pred = pickle.load(open(pkl, "rb"))
 preds.append(pred.values)
 
-pkl = f"{m_dir}/ex02C_efficientnet-b4.pkl"
+pkl = f"{m_dir}/22019720_efficientnet-b4.pkl"
 pred = pickle.load(open(pkl, "rb"))
 preds.append(pred.values)
+
+pkl = f"{m_dir}/ex02C_tta3_efficientnet-b4.pkl"
+pred = pickle.load(open(pkl, "rb"))
+preds.append(pred.values)
+
+"""
+データセット全体にガウスノイズ加算するか
+"""
+is_all_add_gauss_scale = True
