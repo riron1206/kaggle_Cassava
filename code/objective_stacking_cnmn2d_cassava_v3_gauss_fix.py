@@ -14,6 +14,7 @@ import argparse
 import shutil
 import warnings
 import optuna
+import random
 import torch
 import pytorch_lightning as pl
 import numpy as np
@@ -227,6 +228,7 @@ def objective(trial):
     _cnn_pred = cnn_pred.copy()
     if is_all_add_gauss_scale:
         # tarin val 両方にガウスノイズ加算
+        set_seed(seed=42)
         _cnn_pred += np.random.normal(0.0, scale=gauss_scale_fix, size=_cnn_pred.shape)
         CFG.gauss_scale = 0.0
 
@@ -263,6 +265,17 @@ def objective(trial):
 
     return oof
     # return oof_loss
+
+
+def set_seed(seed: int = 0) -> None:
+    np.random.seed(seed)
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
 
 if __name__ == "__main__":
