@@ -100,6 +100,19 @@ class StackingDataModule(pl.LightningDataModule):
         pass
 
     def setup(self, stage=None):
+
+        if self.CFG.cls3_undersample_rate > 0.0:
+            # cls3をundersampleing
+            _y = pd.DataFrame(self.y_train)
+            del_idx = _y[_y[0] == 3].sample(frac=self.CFG.cls3_undersample_rate).index
+            _y = _y.drop(index=del_idx)
+            idx = _y.index
+            self.y_train = _y[0].values
+            self.x_train = self.x_train[idx]
+            print(
+                f"cls3 undersampleing x, y shape: {self.x_train.shape}, {self.y_train.shape}"
+            )
+
         if self.stacking_type == "mlp":
             self.train_dataset = StackingDatasetMLP(self.x_train, self.y_train)
             self.val_dataset = StackingDatasetMLP(self.x_valid, self.y_valid)
@@ -282,7 +295,13 @@ def check_oof(y):
 
 
 def train_stacking(
-    x, y, StackingCFG, is_check_model=False, add_train_x=None, add_train_y=None
+    x,
+    y,
+    StackingCFG,
+    is_check_model=False,
+    add_train_x=None,
+    add_train_y=None,
+    noise_idx=None,
 ):
     print(f"x.shape: {x.shape}")
     print(f"y.shape: {y.shape}")
@@ -303,6 +322,11 @@ def train_stacking(
 
         for j, (train_idx, valid_idx) in enumerate(cv.split(y, y)):
             print(f"train_idx, valid_idx: {len(train_idx)}, {len(valid_idx)}")
+
+            if noise_idx is not None:
+                # ノイズとおぼしきサンプルtrainから除く
+                train_idx = list(set(train_idx) - set(noise_idx))
+                print("denoise train_idx", len(train_idx))
 
             x_train, x_valid = (
                 x[train_idx],
@@ -372,6 +396,9 @@ def train_stacking(
 
             del pl_model
             torch.cuda.empty_cache()  # 空いているキャッシュメモリを解放してGPUメモリの断片化を減らす
+
+        # _, _ = check_oof(y)
+        print(f"fold {i} mean acc:", (y == np.argmax(Y_pred.values, axis=1)).mean())
 
     pickle.dump(Y_pred, open("Y_pred.pkl", "wb"))
     oof, oof_loss = check_oof(y)
@@ -452,5 +479,6 @@ class StackingConfig:
         self.gauss_scale = 0.1
         self.cutmix_p = 0.0
         self.alpha = 1.0
+        self.cls3_undersample_rate = 0.0
         self.device = device
         self.num_workers = 0

@@ -49,6 +49,9 @@ old_df = None
 is_objective_2019 = False
 is_pseudo_2019 = False
 is_all_add_gauss_scale = False
+noise_idx = None
+monitor = "val_acc"
+cls3_undersample_rate = 0.0
 if args.params_py == "objective_stacking_cnmn2d_cassava_params":
     import params.objective_stacking_cnmn2d_cassava_params as params_py
 
@@ -99,6 +102,31 @@ elif args.params_py == "objective_stacking_cnmn2d_cassava_params5_2":
     old_df = params_py.old_df
     is_objective_2019 = params_py.is_objective_2019
     is_pseudo_2019 = params_py.is_pseudo_2019
+
+elif args.params_py == "objective_stacking_cnmn2d_cassava_params5_3":
+    import params.objective_stacking_cnmn2d_cassava_params5_3 as params_py
+
+    print(f"------- import objective_stacking_cnmn2d_cassava_params5_3.py -------")
+    is_all_add_gauss_scale = params_py.is_all_add_gauss_scale
+
+elif args.params_py == "objective_stacking_cnmn2d_cassava_params5_4":
+    import params.objective_stacking_cnmn2d_cassava_params5_4 as params_py
+
+    print(f"------- import objective_stacking_cnmn2d_cassava_params5_4.py -------")
+    noise_idx = params_py.noise_idx
+
+elif args.params_py == "objective_stacking_cnmn2d_cassava_params5_5":
+    import params.objective_stacking_cnmn2d_cassava_params5_5 as params_py
+
+    print(f"------- import objective_stacking_cnmn2d_cassava_params5_5.py -------")
+    monitor = params_py.monitor
+
+elif args.params_py == "objective_stacking_cnmn2d_cassava_params5_6":
+    import params.objective_stacking_cnmn2d_cassava_params5_6 as params_py
+
+    print(f"------- import objective_stacking_cnmn2d_cassava_params5_6.py -------")
+    cls3_undersample_rate = params_py.cls3_undersample_rate
+
 
 elif args.params_py == "objective_stacking_cnmn2d_cassava_params6_1":
     import params.objective_stacking_cnmn2d_cassava_params6_1 as params_py
@@ -187,6 +215,8 @@ def objective(trial):
     CFG.device = device
     CFG.num_workers = num_workers
     CFG.arch = arch
+    CFG.monitor = monitor
+    CFG.cls3_undersample_rate = cls3_undersample_rate
 
     kwargs_head = dict(
         n_features_list=[-1, n_classes],
@@ -232,7 +262,7 @@ def objective(trial):
     print("-" * 100)
     print(f"CFG: {CFG.__dict__}")
 
-    oof, oof_loss = train_stacking(_cnn_pred, y, CFG)
+    oof, oof_loss = train_stacking(_cnn_pred, y, CFG, noise_idx=noise_idx)
 
     # 2019年のpklも最適化のデータに使う場合
     if is_objective_2019:
