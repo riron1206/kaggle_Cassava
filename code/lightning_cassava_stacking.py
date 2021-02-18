@@ -6,7 +6,13 @@ import pickle
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import accuracy_score, log_loss
+from sklearn.metrics import (
+    accuracy_score,
+    log_loss,
+    classification_report,
+    confusion_matrix,
+    f1_score,
+)
 from colorama import Fore
 
 import torch
@@ -95,6 +101,7 @@ class StackingDataModule(pl.LightningDataModule):
         self.CFG = CFG
         self.stacking_type = stacking_type
         self.tmp_seed = tmp_seed
+        # print([_y for _y in y_train])
 
     def prepare_data(self):
         pass
@@ -111,6 +118,20 @@ class StackingDataModule(pl.LightningDataModule):
             self.x_train = self.x_train[idx]
             print(
                 f"cls3 undersampleing x, y shape: {self.x_train.shape}, {self.y_train.shape}"
+            )
+
+        # バイナリ用
+        if self.CFG.train_n_classes == 2 and self.CFG.n_over > 0:
+            _y = pd.DataFrame(self.y_train)
+            _y[_y[0] == 1].values
+            idx = _y[_y[0] == 1].index
+            for ii in range(self.CFG.n_over):
+                self.x_train = np.vstack([self.x_train, self.x_train[idx]])
+                self.y_train = np.concatenate([self.y_train, self.y_train[idx]])
+            print(
+                f"n_over={self.CFG.n_over} x, y.shape:",
+                self.x_train.shape,
+                self.y_train.shape,
             )
 
         if self.stacking_type == "mlp":
@@ -194,7 +215,7 @@ class LitStackingModel(pl.LightningModule):
         return [optimizer], [scheduler]
 
     def training_step(self, batch, batch_idx):
-        x, y = batch["x"].float(), batch["y"]
+        x, y = batch["x"].float(), batch["y"].long()
 
         if self.CFG.gauss_scale > 0.0:
             # 過学習防ぐためにガウシアンノイズ加算
@@ -208,7 +229,7 @@ class LitStackingModel(pl.LightningModule):
         # print("\ny before", y)
         if self.CFG.cutmix_p > 0.0:
             # onehot
-            y_onehot = torch.eye(self.CFG.n_classes)[y]
+            y_onehot = torch.eye(self.CFG.train_n_classes)[y]
             if x.ndim == 2:
                 # cutmix for table
                 x, y_onehot = cutmix_for_tabular(
@@ -242,17 +263,19 @@ class LitStackingModel(pl.LightningModule):
             loss_fn = BiTemperedLoss(
                 t1=self.CFG.t1, t2=self.CFG.t2, smoothing=self.CFG.smoothing
             ).to(self.CFG.device)
-        # else:
-        #    loss_fn = nn.CrossEntropyLoss().to(self.CFG.device)
+        else:
+            loss_fn = nn.CrossEntropyLoss().to(self.CFG.device)
 
         y_hat = self(x.float())
+        # print(y_hat)
 
         acc = accuracy(y_hat, y)
+        # print(acc, y_hat.shape, y.shape)
 
         if self.CFG.cutmix_p > 0.0:
             loss = loss_fn(y_hat, y_onehot)
         else:
-            loss = loss_fn(y_hat, y)
+            loss = loss_fn(y_hat, y.long())
 
         self.log(
             "train_acc", acc, on_step=False, on_epoch=True, prog_bar=True, logger=True
@@ -263,8 +286,11 @@ class LitStackingModel(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y = batch["x"].float(), batch["y"]
+        x, y = batch["x"].float(), batch["y"].long()
+        # print(x, y)
         y_hat = self(x)
+        # print(y_hat)
+        # print(y_hat.shape)
         loss = nn.CrossEntropyLoss()(y_hat, y)
         acc = accuracy(y_hat, y)
         self.log("val_acc", acc, prog_bar=True, logger=True),
@@ -291,6 +317,8 @@ def check_oof(y):
     oof_loss = log_loss(y, Y_oof.values)
     print(y_, f"oof:", round(oof, 4))
     print(y_, f"oof_loss:", round(oof_loss, 4))
+    print(y_, classification_report(y, Y_oof.values.argmax(1)))
+    print(y_, "cfm:\n", confusion_matrix(y, Y_oof.values.argmax(1)))
     return oof, oof_loss
 
 
@@ -307,7 +335,7 @@ def train_stacking(
     print(f"y.shape: {y.shape}")
 
     Y_pred = pd.DataFrame(
-        np.zeros((len(y), StackingCFG.n_classes)),
+        np.zeros((len(y), StackingCFG.train_n_classes)),
         # columns=name_mapping.values(),
         # index=df.index,
     )
@@ -413,7 +441,7 @@ def pred_stacking(x, StackingCFG, y=None):
     else:
         test_dataset = StackingDatasetCNN(x, y)
 
-    test_preds = np.zeros((len(x), StackingCFG.n_classes))
+    test_preds = np.zeros((len(x), StackingCFG.train_n_classes))
 
     for i in StackingCFG.seeds:
         print(f"seed: {i}")
@@ -452,7 +480,8 @@ def pred_stacking(x, StackingCFG, y=None):
 class StackingConfig:
     def __init__(self):
         self.seeds = [0]
-        self.n_classes = 5
+        self.n_classes = 5  # 特徴量の次元。要は特徴量データフレームの列数にしないとだめ。変数名ややこしいがpytorch_stacking.py のstackingモデルの関係からこうなってる
+        self.train_n_classes = 5  # 予測するクラス数
         self.max_epochs = 200
         self.patience = 50
         self.n_splits = 5
@@ -480,5 +509,6 @@ class StackingConfig:
         self.cutmix_p = 0.0
         self.alpha = 1.0
         self.cls3_undersample_rate = 0.0
+        self.n_over = 0  # マイナークラスn倍
         self.device = device
         self.num_workers = 0

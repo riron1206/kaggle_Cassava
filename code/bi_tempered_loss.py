@@ -221,6 +221,10 @@ def bi_tempered_logistic_loss(
 
     if len(labels.shape) < len(activations.shape):  # not one-hot
         labels_onehot = torch.zeros_like(activations)
+        # print(labels.shape, activations.shape)
+        # print(labels_onehot)
+        # print(labels_onehot.scatter_(1, labels[..., None], 1))
+        # print(labels)
         labels_onehot.scatter_(1, labels[..., None], 1)
     else:
         labels_onehot = labels

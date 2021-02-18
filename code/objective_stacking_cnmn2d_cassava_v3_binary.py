@@ -18,20 +18,21 @@ import torch
 import pytorch_lightning as pl
 import numpy as np
 import pandas as pd
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, f1_score
 
 from lightning_cassava_stacking import (
     train_stacking,
     pred_stacking,
     StackingConfig,
 )
+from params import base_data
 
 warnings.filterwarnings("ignore")
 
 # 引数でパラメータ(pkl)の条件変える
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "-p", "--params_py", type=str, default="objective_stacking_cnmn2d_cassava_params3"
+    "-p", "--params_py", type=str, default="objective_stacking_cnmn2d_cassava_params5",
 )
 parser.add_argument(
     "-d",
@@ -175,33 +176,6 @@ elif args.params_py == "objective_stacking_cnmn2d_cassava_params6_9":
     is_all_add_gauss_scale = params_py.is_all_add_gauss_scale
 
 
-elif args.params_py == "objective_stacking_cnmn2d_cassava_params7_1":
-    import params.objective_stacking_cnmn2d_cassava_params7_1 as params_py
-
-    print(f"------- import objective_stacking_cnmn2d_cassava_params7_1.py -------")
-
-elif args.params_py == "objective_stacking_cnmn2d_cassava_params7_2":
-    import params.objective_stacking_cnmn2d_cassava_params7_2 as params_py
-
-    print(f"------- import objective_stacking_cnmn2d_cassava_params7_2.py -------")
-
-elif args.params_py == "objective_stacking_cnmn2d_cassava_params7_3":
-    import params.objective_stacking_cnmn2d_cassava_params7_3 as params_py
-
-    print(f"------- import objective_stacking_cnmn2d_cassava_params7_3.py -------")
-
-
-elif args.params_py == "objective_stacking_cnmn2d_cassava_params8_1":
-    import params.objective_stacking_cnmn2d_cassava_params8_1 as params_py
-
-    print(f"------- import objective_stacking_cnmn2d_cassava_params8_1.py -------")
-
-elif args.params_py == "objective_stacking_cnmn2d_cassava_params8_2":
-    import params.objective_stacking_cnmn2d_cassava_params8_2 as params_py
-
-    print(f"------- import objective_stacking_cnmn2d_cassava_params8_2.py -------")
-
-
 if args.debug:
     max_epochs = 2
     n_trials = 2
@@ -219,6 +193,8 @@ df = params_py.df
 name_mapping = params_py.name_mapping
 preds = params_py.preds
 n_models = len(preds)
+noise_image_id = base_data.noise_image_id
+noise_idx = list(df[df["image_id"].isin(noise_image_id)].index)
 
 if is_pseudo_2019:
     # 2019年のpklで pseudo label
@@ -226,10 +202,18 @@ if is_pseudo_2019:
     cnn_pred = np.stack(preds).transpose(1, 2, 0)
     cnn_pred = cnn_pred.reshape(len(cnn_pred), 1, n_classes, n_models)
     y = np.concatenate([df["label"].values, old_df["label"].values])
+    # バイナリにする
+    y = np.array([0] * len(y))
+    y[noise_idx] = 1
 else:
     cnn_pred = np.stack(preds).transpose(1, 2, 0)
     cnn_pred = cnn_pred.reshape(len(cnn_pred), 1, n_classes, n_models)
     y = df["label"].values
+    # バイナリにする
+    y = np.array([0] * len(y))
+    y[noise_idx] = 1
+print("y.value_counts():")
+print(pd.Series(y).value_counts())
 
 
 def objective(trial):
@@ -244,6 +228,7 @@ def objective(trial):
     CFG.arch = arch
     CFG.monitor = monitor
     CFG.cls3_undersample_rate = cls3_undersample_rate
+    CFG.n_over = 10  # oversanplingしないと全然学習できない
 
     kwargs_head = dict(
         n_features_list=[-1, n_classes],
@@ -265,8 +250,12 @@ def objective(trial):
 
     CFG.weight_decay = trial.suggest_categorical("weight_decay", [1e-5, 1e-3, 1e-1])
     CFG.smoothing = trial.suggest_discrete_uniform("smoothing", 0.0, 0.3, 0.1)
-    CFG.t1 = trial.suggest_discrete_uniform("t1", 0.7, 1.0, 0.1)
-    CFG.t2 = trial.suggest_discrete_uniform("t2", 1.0, 1.3, 0.1)
+    CFG.t1 = 1.0  # trial.suggest_discrete_uniform("t1", 0.7, 1.0, 0.1)
+    CFG.t2 = 1.0  # trial.suggest_discrete_uniform("t2", 1.0, 1.3, 0.1)
+
+    # バイナリで分類
+    CFG.train_n_classes = 2
+    CFG.cnn2d_params["kwargs_head"]["n_features_list"] = [-1, CFG.train_n_classes]
 
     _cnn_pred = cnn_pred.copy()
     gauss_scale = trial.suggest_discrete_uniform("gauss_scale", 0.05, 0.25, 0.01)
@@ -289,7 +278,12 @@ def objective(trial):
     print("-" * 100)
     print(f"CFG: {CFG.__dict__}")
 
-    oof, oof_loss = train_stacking(_cnn_pred, y, CFG, noise_idx=noise_idx)
+    oof, oof_loss = train_stacking(
+        _cnn_pred,
+        y,
+        CFG,
+        # noise_idx=noise_idx  # ノイズ消さない
+    )
 
     # 2019年のpklも最適化のデータに使う場合
     if is_objective_2019:
@@ -303,8 +297,15 @@ def objective(trial):
         print(f"old_acc:", old_acc)
         print(f"(oof + old_acc) / 2.0:", oof)
 
-    return oof
+    # return oof
     # return oof_loss
+
+    # バイナリの場合はfiを最適化する
+    y_pred = pickle.load(open("Y_pred.pkl", "rb")).values
+    # print(y)
+    # print(y_pred)
+    f1 = f1_score(y, y_pred.argmax(1), average="macro")
+    return f1
 
 
 if __name__ == "__main__":

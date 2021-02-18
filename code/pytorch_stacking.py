@@ -74,8 +74,21 @@ class LBAD(nn.Module):
 class MLP(nn.Module):
     """Stacked Dense layers
     Usage:
+        import glob
+        import pathlib
+
+        n_classes = 3
+
+        m_dir = r"C:/Users/81908/jupyter_notebook/pytorch_lightning_work/kaggle_Cassava/notebook/check_oof/cassava-emsemble-v2_tta_oof/kaggle_upload_oof_tta"
+        preds = []
+        for pkl_path in sorted(glob.glob(f"{m_dir}/*.pkl")):
+            preds.append(pickle.load(open(f"{pkl_path}", "rb")))  # データフレームでないとだめ
+        mlp_n_classes = preds[0].shape[1]
+        n_models = len(preds)
+        print("n_models:", n_models)  # n_models: 14
+
         mlp_params = dict(
-            n_features_list=[n_classes*n_models, 8, n_classes],
+            n_features_list=[mlp_n_classes * n_models, 8, n_classes],  # [mlp_n_classes * n_models, n_classes] だと出力層1層だけになり、drop_rate指定してもdropoutが使われない
             use_tail_as_out=True,
             drop_rate=0.2,
             use_bn=False,
@@ -85,8 +98,14 @@ class MLP(nn.Module):
         print(mlp)
 
         # 予測
-        x = mlp_pred.values[0]
+        mlp_pred = pd.concat(preds, axis=1)
+        print("mlp_pred.shape:", mlp_pred.shape)  # mlp_pred.shape: (21397, 70)
+
+        bs = 5
+        x = mlp_pred.values[:bs]
+        print("x.shape:", x.shape)  # x.shape: (5, 70)
         x = torch.from_numpy(x.astype(np.float32)).clone()
+        print("x.shape:", x.shape)  # x.shape: torch.Size([5, 70])
         mlp(x)
     """
 
@@ -123,8 +142,24 @@ class MLP(nn.Module):
 class CNNStacking1d(nn.Module):
     """1D-CNN for Stacking.
     Usage:
+        import glob
+        import pathlib
+
+        n_classes = 3
+
+        m_dir = r"C:/Users/81908/jupyter_notebook/pytorch_lightning_work/kaggle_Cassava/notebook/check_oof/cassava-emsemble-v2_tta_oof/kaggle_upload_oof_tta"
+        preds = []
+        for pkl_path in sorted(glob.glob(f"{m_dir}/*.pkl")):
+            preds.append(pickle.load(open(f"{pkl_path}", "rb")).values)
+        preds = np.array(preds)
+        cnn1d_n_classes = preds.shape[2]
+        print("cnn1d_n_classes:", cnn1d_n_classes)  # cnn1d_n_classes: 5
+        n_models = len(preds)
+        print("preds.shape:", preds.shape)  # preds.shape: (14, 21397, 5)
+        print("n_models:", n_models)  # n_models: 14
+
         kwargs_head = dict(
-            n_features_list=[64, n_classes],
+            n_features_list=[-1,　15,　n_classes,],  # [-1, n_classes] だと出力層1層だけになり、drop_rate指定してもdropoutが使われない
             use_tail_as_out=True,
             drop_rate=0.8,
             use_bn=False,
@@ -132,7 +167,7 @@ class CNNStacking1d(nn.Module):
         )
         cnn1d_params = dict(
             n_models=n_models,
-            n_channels_list=[n_classes, 64],
+            n_channels_list=[cnn1d_n_classes, 64],
             use_bias=True,
             kwargs_head=kwargs_head,
         )
@@ -140,14 +175,17 @@ class CNNStacking1d(nn.Module):
         print(cnmn1d)
 
         # 予測
-        cnn_pred = np.stack([pred1, pred2, pred3, pred4]).transpose(1,2,0)
-        print(cnn_pred.shape)  # shape: (n_sample, n_classes, n_models)
+        cnn_pred = np.stack(preds).transpose(1, 2, 0)
+        print("cnn_pred.shape:", cnn_pred.shape)  # cnn_pred.shape: (21397, 5, 14)
 
         bs = 5
-        x = cnn_pred[:bs] # shape: (bs, n_classes, n_models)
-        print(x)
+        x = cnn_pred[:bs]  # shape: (bs, n_classes, n_models)
+        print("x.shape:", x.shape)  # x.shape: (5, 5, 14)
+        # print(x)
         x = torch.from_numpy(x.astype(np.float32)).clone()
+        print("x.shape:", x.shape)  # x.shape: torch.Size([5, 5, 14])
         cnmn1d(x)
+        print()
     """
 
     def __init__(
@@ -192,8 +230,24 @@ class CNNStacking1d(nn.Module):
 class CNNStacking2d(nn.Module):
     """2D-CNN for Stacking.
     Usage:
+        import glob
+        import pathlib
+
+        n_classes = 3
+
+        m_dir = r"C:/Users/81908/jupyter_notebook/pytorch_lightning_work/kaggle_Cassava/notebook/check_oof/cassava-emsemble-v2_tta_oof/kaggle_upload_oof_tta"
+        preds = []
+        for pkl_path in sorted(glob.glob(f"{m_dir}/*.pkl")):
+            preds.append(pickle.load(open(f"{pkl_path}", "rb")).values)
+        preds = np.array(preds)
+        cnn2d_n_classes = preds.shape[2]
+        print("cnn2d_n_classes:", cnn2d_n_classes)  # cnn2d_n_classes: 5
+        n_models = len(preds)
+        print("preds.shape:", preds.shape)  # preds.shape: (14, 21397, 5)
+        print("n_models:", n_models)  # n_models: 14
+
         kwargs_head = dict(
-            n_features_list=[-1, n_classes],
+            n_features_list=[-1, 15, n_classes],  # [-1, n_classes] だと出力層1層だけになり、drop_rate指定してもdropoutが使われない
             use_tail_as_out=True,
             drop_rate=0.8,
             use_bn=False,
@@ -201,7 +255,7 @@ class CNNStacking2d(nn.Module):
         )
         cnn2d_params = dict(
             n_models=n_models,
-            n_classes=n_classes,
+            n_classes=cnn2d_n_classes,
             n_channels_list=[1, 8],
             use_bias=True,
             kwargs_head=kwargs_head,
@@ -210,13 +264,15 @@ class CNNStacking2d(nn.Module):
         print(cnn2d)
 
         # 予測
-        cnn_pred = np.stack([pred1, pred2, pred3, pred4]).transpose(1,2,0)
-        print(cnn_pred.shape)  # shape: (n_sample, n_classes, n_models)
+        cnn_pred = np.stack(preds).transpose(1, 2, 0)
+        print("cnn_pred.shape:", cnn_pred.shape)  # shape: (n_sample, n_classes, n_models)  # cnn_pred.shape: (21397, 5, 14)
 
-        bs = 5
+        bs = 15
         x = cnn_pred[:bs]
-        x = x.reshape(bs,1,n_classes, n_models)# shape: (bs, 1, n_classes, n_models)
-        print(x)
+        print("x.shape:", x.shape)  # x.shape: (15, 5, 14)
+        x = x.reshape(bs, 1, cnn_pred.shape[1], n_models)  # shape: (bs, 1, n_classes, n_models)
+        print("x.shape:", x.shape)  # x.shape: (15, 1, 5, 14)
+        # print(x)
         x = torch.from_numpy(x.astype(np.float32)).clone()
         cnn2d(x)
     """
