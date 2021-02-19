@@ -29,3 +29,16 @@
 - 2019年に同様のコンペ開催されており、2019年のデータ利用可能
     - https://www.kaggle.com/c/cassava-disease/data
     - 2019年のコンペの論文: https://arxiv.org/abs/1908.02900
+
+
+
+## 結果
+
+38位
+
+![img1](Cassava_Leaf_Disease_Classification_Model_Pipeline.jpg)
+
+
+bestなモデル選べてたら金圏だった。cv/LB どちらもbestなサブではないから選ぶのは不可能だったが。
+
+![img2](sub_img.png)
