@@ -34,7 +34,7 @@
 
 ## 結果
 
-38位
+34位
 
 ![img1](Cassava_Leaf_Disease_Classification_Model_Pipeline.jpg)
 
