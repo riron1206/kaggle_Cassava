@@ -43,8 +43,14 @@ bestなモデル選べてたら金圏だった。cv/LB どちらもbestなサブ
 
 ![img2](sub_img.png)
 
-------------------------------------------------------------------------------------------------
 
-zennの記事: 
+
+## zennのコンペ振り返り記事: 
 
 https://zenn.dev/anonamename/articles/2fc40af8f165b6
+
+
+
+## wandbの実験履歴
+
+https://wandb.ai/anonamename/kaggle_cassava
