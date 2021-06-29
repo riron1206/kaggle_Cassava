@@ -54,3 +54,17 @@ https://zenn.dev/anonamename/articles/2fc40af8f165b6
 ## wandbの実験履歴
 
 https://wandb.ai/anonamename/kaggle_cassava
+
+
+
+## 上位ソリューション
+
+TF hub の学習済みモデル（Cropnet）でアンサンブルするだけで[2位](https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/220898)になってる
+
+[1位も同様の手法](https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/221957)
+
+学習済みモデルがtest setの画像を含めて作られたため？このモデル混ぜるだけで精度上がったっぽい
+
+要はリークしてた。[コンペ後に上がったこのディスカッション](https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/222035)でリークのこと話してる
+
+[3位の人はvitのみで頑張ってた](https://www.kaggle.com/c/cassava-leaf-disease-classification/discussion/221150)
